@@ -11,3 +11,6 @@ app/ios/
 app/android/
 ios/
 android/
+app/playwright-report/
+app/test-results/
+outputs/
