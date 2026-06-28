@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Flexible Reminder lock buzz logo</title>
+  <desc id="desc">A warm terracotta lock with small reminder vibration marks.</desc>
+  <defs>
+    <linearGradient id="terracotta" x1="248" y1="286" x2="776" y2="824" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#D97950" />
+      <stop offset="1" stop-color="#A9472A" />
+    </linearGradient>
+    <linearGradient id="paper" x1="120" y1="96" x2="904" y2="928" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FCFAF7" />
+      <stop offset="1" stop-color="#F1E6D6" />
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#paper)" />
+  <circle cx="512" cy="538" r="330" fill="#F7EFE4" />
+  <path
+    d="M334 436V344c0-104 78-184 178-184s178 80 178 184v92"
+    fill="none"
+    stroke="#A9472A"
+    stroke-width="72"
+    stroke-linecap="round"
+  />
+  <rect x="254" y="402" width="516" height="424" rx="104" fill="url(#terracotta)" />
+  <rect x="310" y="462" width="404" height="304" rx="72" fill="#CF623B" opacity=".48" />
+  <path
+    d="M512 558a58 58 0 0 0-28 109v72h56v-72a58 58 0 0 0-28-109Z"
+    fill="#2B1B12"
+  />
+  <path
+    d="M194 400l-78-54M174 536H76M216 660l-82 52M830 400l78-54M850 536h98M808 660l82 52"
+    fill="none"
+    stroke="#C9862F"
+    stroke-width="42"
+    stroke-linecap="round"
+  />
+  <path
+    d="M276 274l-54-82M748 274l54-82"
+    fill="none"
+    stroke="#CF623B"
+    stroke-width="36"
+    stroke-linecap="round"
+  />
+</svg>
