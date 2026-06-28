@@ -1,0 +1,3 @@
+*.pen binary
+*.md text eol=lf
+*.js text eol=lf
