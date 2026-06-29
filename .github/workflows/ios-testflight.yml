@@ -260,7 +260,6 @@ jobs:
         working-directory: app
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          IOS_PROFILE_NAME: ${{ steps.signing_assets.outputs.profile_name }}
           IOS_PROFILE_UUID: ${{ steps.signing_assets.outputs.profile_uuid }}
         run: |
           python3 <<'PY'
@@ -292,7 +291,7 @@ jobs:
               '"CODE_SIGN_IDENTITY[sdk=iphoneos*]"': quote("Apple Distribution"),
               "DEVELOPMENT_TEAM": os.environ["APPLE_TEAM_ID"],
               "PROVISIONING_PROFILE": quote(os.environ["IOS_PROFILE_UUID"]),
-              "PROVISIONING_PROFILE_SPECIFIER": quote(os.environ["IOS_PROFILE_NAME"]),
+              "PROVISIONING_PROFILE_SPECIFIER": quote(os.environ["IOS_PROFILE_UUID"]),
           }
 
           def set_setting(block, key, value):
@@ -324,7 +323,7 @@ jobs:
         working-directory: app
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          IOS_PROFILE_NAME: ${{ steps.signing_assets.outputs.profile_name }}
+          IOS_PROFILE_UUID: ${{ steps.signing_assets.outputs.profile_uuid }}
         run: |
           cat > ExportOptions.plist <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
@@ -342,7 +341,7 @@ jobs:
             <key>provisioningProfiles</key>
             <dict>
               <key>${IOS_BUNDLE_ID}</key>
-              <string>${IOS_PROFILE_NAME}</string>
+              <string>${IOS_PROFILE_UUID}</string>
             </dict>
             <key>stripSwiftSymbols</key>
             <true/>
