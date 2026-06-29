@@ -100,7 +100,7 @@ version bump. The workflow resolves:
 - `MARKETING_VERSION` from `app/package.json` or the manual
   `marketing_version` workflow input
 - `CURRENT_PROJECT_VERSION` from the manual `build_number` workflow input or
-  `github.run_number.github.run_attempt`
+  the runner env vars `GITHUB_RUN_NUMBER.GITHUB_RUN_ATTEMPT`
 
 Apple still requires each upload within the same app version to have a unique
 build number, so the build value continues to increase even though the visible
