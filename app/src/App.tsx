@@ -52,6 +52,7 @@ type DisplayOccurrence = {
 
 const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const workweek: Weekday[] = [1, 2, 3, 4, 5];
+const appVersion = import.meta.env.VITE_APP_VERSION;
 
 const starterInputs: CreateReminderInput[] = [
   {
@@ -557,7 +558,7 @@ function SettingsScreen({
         </SettingsRow>
 
         <SettingsRow label="Export data" value={`${reminderCount} reminders`} />
-        <SettingsRow label="About" value="Flexible Reminder 0.1" />
+        <SettingsRow label="About" value={`Flexible Reminder ${appVersion}`} />
       </div>
     </div>
   );
