@@ -28,6 +28,7 @@ permissions:
 env:
   IOS_BUNDLE_ID: com.hdduong.flexiblereminder
   IOS_SCHEME: App
+  IOS_PROJECT: ../ios/App/App.xcodeproj
   IOS_WORKSPACE: ../ios/App/App.xcworkspace
 
 jobs:
@@ -201,6 +202,37 @@ jobs:
           chmod 600 "$API_KEY_PATH"
           openssl pkey -in "$API_KEY_PATH" -noout > /dev/null
 
+      - name: Create export options
+        if: steps.signing.outputs.configured == 'true' && github.event_name != 'pull_request'
+        working-directory: app
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cat > ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>teamID</key>
+            <string>${APPLE_TEAM_ID}</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Resolve iOS package dependencies
+        if: steps.signing.outputs.configured == 'true' && github.event_name != 'pull_request'
+        working-directory: app
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project "$IOS_PROJECT" \
+            -scheme "$IOS_SCHEME"
+
       - name: Archive signed iOS app
         if: steps.signing.outputs.configured == 'true' && github.event_name != 'pull_request'
         working-directory: app
@@ -209,8 +241,8 @@ jobs:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
         run: |
-          xcodebuild \
-            -workspace "$IOS_WORKSPACE" \
+          xcodebuild archive \
+            -project "$IOS_PROJECT" \
             -scheme "$IOS_SCHEME" \
             -configuration Release \
             -destination 'generic/platform=iOS' \
@@ -221,45 +253,25 @@ jobs:
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID" \
-            CODE_SIGN_STYLE=Automatic \
-            archive
+            CODE_SIGN_STYLE=Automatic
 
       - name: Export IPA
         if: steps.signing.outputs.configured == 'true' && github.event_name != 'pull_request'
         env:
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
         run: |
-          EXPORT_OPTIONS="$RUNNER_TEMP/ExportOptions.plist"
-          cat > "$EXPORT_OPTIONS" <<PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>app-store-connect</string>
-            <key>teamID</key>
-            <string>$APPLE_TEAM_ID</string>
-            <key>signingStyle</key>
-            <string>automatic</string>
-            <key>stripSwiftSymbols</key>
-            <true/>
-          </dict>
-          </plist>
-          PLIST
-
           xcodebuild \
             -exportArchive \
             -archivePath "$RUNNER_TEMP/FlexibleReminder.xcarchive" \
             -exportPath "$RUNNER_TEMP/testflight" \
-            -exportOptionsPlist "$EXPORT_OPTIONS" \
+            -exportOptionsPlist app/ExportOptions.plist \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$RUNNER_TEMP/appstoreconnect/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8" \
             -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
 
-      - name: Locate exported IPA
+      - name: Normalize IPA name
         if: steps.signing.outputs.configured == 'true' && github.event_name != 'pull_request'
         id: ipa
         run: |
@@ -268,14 +280,15 @@ jobs:
             echo "::error::No IPA was exported for TestFlight upload."
             exit 1
           fi
-          echo "path=$IPA_PATH" >> "$GITHUB_OUTPUT"
+          mv "$IPA_PATH" "$RUNNER_TEMP/testflight/FlexibleReminder.ipa"
+          echo "path=$RUNNER_TEMP/testflight/FlexibleReminder.ipa" >> "$GITHUB_OUTPUT"
 
       - name: Upload IPA artifact
         if: steps.signing.outputs.configured == 'true' && github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: flexible-reminder-ipa
-          path: ${{ runner.temp }}/testflight/*.ipa
+          path: ${{ runner.temp }}/testflight/FlexibleReminder.ipa
           if-no-files-found: error
 
       - name: Upload to TestFlight
