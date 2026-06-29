@@ -189,22 +189,6 @@ jobs:
           printf '%s' "$APP_STORE_CONNECT_API_KEY" > "$API_KEY_PATH"
           chmod 600 "$API_KEY_PATH"
 
-      - name: Use distribution signing identity
-        if: steps.signing.outputs.configured == 'true' && github.event_name != 'pull_request'
-        working-directory: app
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
-
-          project = Path("../ios/App/App.xcodeproj/project.pbxproj")
-          text = project.read_text()
-          text = text.replace(
-              'CODE_SIGN_IDENTITY = "iPhone Developer";',
-              'CODE_SIGN_IDENTITY = "Apple Distribution";',
-          )
-          project.write_text(text)
-          PY
-
       - name: Archive signed iOS app
         if: steps.signing.outputs.configured == 'true' && github.event_name != 'pull_request'
         working-directory: app
