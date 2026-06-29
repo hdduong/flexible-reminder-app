@@ -57,14 +57,16 @@ pushes to `main`, and manual dispatch. It installs dependencies in `app/`,
 builds the Vite app, runs Vitest and Playwright, adds or syncs the Capacitor iOS
 project, then:
 
-- builds an unsigned simulator app when signing secrets are missing, on pull requests, and on non-`main` branches
-- archives, exports an IPA, and uploads to TestFlight from `main` only when all manual Apple signing secrets are configured
+- builds an unsigned simulator app when signing secrets are missing, on pull requests, on pushes to `main`, and on non-`main` branches
+- archives, exports an IPA, and uploads to TestFlight only when the workflow is manually dispatched from `main` and all manual Apple signing secrets are configured
 - uploads the Playwright report and test screenshots as workflow artifacts
 - uploads the generated `ios/` project as a workflow artifact for inspection
 
 The signed path uses GitHub's macOS 26 runner and selects Xcode 26 so TestFlight
-uploads are built with a current App Store Connect SDK. Manual dispatches from
-feature branches never upload to TestFlight.
+uploads are built with a current App Store Connect SDK. Merging into `main` does
+not upload to TestFlight; you must manually run the workflow from `main` when
+you want a TestFlight build. Manual dispatches from feature branches never
+upload to TestFlight.
 
 Required repository secrets for signed TestFlight uploads:
 

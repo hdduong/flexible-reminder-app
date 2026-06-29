@@ -186,14 +186,14 @@ jobs:
           if [ "${#missing[@]}" -eq 0 ]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
             echo "Signing and TestFlight upload are configured." >> "$GITHUB_STEP_SUMMARY"
-            echo "Signed archive and TestFlight upload only run on main." >> "$GITHUB_STEP_SUMMARY"
+            echo "Signed archive and TestFlight upload only run on manual dispatch from main." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
             echo "Signing/TestFlight skipped. Missing secrets: ${missing[*]}" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Build unsigned iOS simulator app
-        if: steps.signing.outputs.configured != 'true' || github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
+        if: steps.signing.outputs.configured != 'true' || github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/main'
         working-directory: app
         run: |
           xcodebuild \
@@ -206,7 +206,7 @@ jobs:
             build
 
       - name: Import Apple signing assets
-        if: steps.signing.outputs.configured == 'true' && github.ref == 'refs/heads/main'
+        if: steps.signing.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         id: signing_assets
         env:
           IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
@@ -248,7 +248,7 @@ jobs:
           echo "profile_uuid=$PROFILE_UUID" >> "$GITHUB_OUTPUT"
 
       - name: Configure App target manual signing
-        if: steps.signing.outputs.configured == 'true' && github.ref == 'refs/heads/main'
+        if: steps.signing.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         working-directory: app
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -314,7 +314,7 @@ jobs:
           PY
 
       - name: Create export options
-        if: steps.signing.outputs.configured == 'true' && github.ref == 'refs/heads/main'
+        if: steps.signing.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         working-directory: app
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -345,7 +345,7 @@ jobs:
           EOF
 
       - name: Resolve iOS package dependencies
-        if: steps.signing.outputs.configured == 'true' && github.ref == 'refs/heads/main'
+        if: steps.signing.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         working-directory: app
         run: |
           xcodebuild -resolvePackageDependencies \
@@ -353,7 +353,7 @@ jobs:
             -scheme "$IOS_SCHEME"
 
       - name: Archive signed iOS app
-        if: steps.signing.outputs.configured == 'true' && github.ref == 'refs/heads/main'
+        if: steps.signing.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         working-directory: app
         run: |
           xcodebuild archive \
@@ -364,7 +364,7 @@ jobs:
             -archivePath "$RUNNER_TEMP/FlexibleReminder.xcarchive"
 
       - name: Export IPA
-        if: steps.signing.outputs.configured == 'true' && github.ref == 'refs/heads/main'
+        if: steps.signing.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         run: |
           xcodebuild \
             -exportArchive \
@@ -373,7 +373,7 @@ jobs:
             -exportOptionsPlist app/ExportOptions.plist
 
       - name: Normalize IPA name
-        if: steps.signing.outputs.configured == 'true' && github.ref == 'refs/heads/main'
+        if: steps.signing.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         id: ipa
         run: |
           IPA_PATH="$(find "$RUNNER_TEMP/testflight" -name '*.ipa' -print -quit)"
@@ -385,7 +385,7 @@ jobs:
           echo "path=$RUNNER_TEMP/testflight/FlexibleReminder.ipa" >> "$GITHUB_OUTPUT"
 
       - name: Upload IPA artifact
-        if: steps.signing.outputs.configured == 'true' && github.ref == 'refs/heads/main'
+        if: steps.signing.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: flexible-reminder-ipa
@@ -393,7 +393,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload to TestFlight
-        if: steps.signing.outputs.configured == 'true' && github.ref == 'refs/heads/main'
+        if: steps.signing.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         uses: apple-actions/upload-testflight-build@v3
         with:
           app-path: ${{ steps.ipa.outputs.path }}
