@@ -16,23 +16,24 @@ on:
 permissions:
   contents: read
 
-# Signed TestFlight upload requires these repository secrets:
+# Automatic signing and TestFlight upload require these repository secrets:
 # APPLE_TEAM_ID
-# IOS_DISTRIBUTION_CERTIFICATE_BASE64
-# IOS_DISTRIBUTION_CERTIFICATE_PASSWORD
-# IOS_PROVISIONING_PROFILE_BASE64
-# IOS_PROVISIONING_PROFILE_SPECIFIER
-# APP_STORE_CONNECT_API_KEY_ID
-# APP_STORE_CONNECT_API_ISSUER_ID
-# APP_STORE_CONNECT_API_PRIVATE_KEY
+# APP_STORE_CONNECT_ISSUER_ID
+# APP_STORE_CONNECT_KEY_ID
+# APP_STORE_CONNECT_API_KEY
 #
 # If any are missing, this workflow still builds the Vite app, syncs/adds iOS,
 # and performs an unsigned simulator build to validate the generated project.
 
+env:
+  IOS_BUNDLE_ID: com.hdduong.flexiblereminder
+  IOS_SCHEME: App
+  IOS_WORKSPACE: ../ios/App/App.xcworkspace
+
 jobs:
   ios:
     name: Build iOS
-    runs-on: macos-14
+    runs-on: macos-26
 
     defaults:
       run:
@@ -41,6 +42,33 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          XCODE_PATH="/Applications/Xcode_26.5.app"
+          if [ ! -d "$XCODE_PATH" ]; then
+            XCODE_PATH="$(python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          def version_key(path):
+              match = re.search(r"Xcode_(\d+(?:\.\d+)*).*\.app$", path.name)
+              if not match:
+                  return ()
+              return tuple(int(part) for part in match.group(1).split("."))
+
+          paths = [path for path in Path("/Applications").glob("Xcode_26*.app") if path.is_dir()]
+          if paths:
+              print(max(paths, key=version_key))
+          PY
+          )"
+          fi
+          if [ ! -d "$XCODE_PATH" ]; then
+            echo "::error::Xcode 26 is required for App Store Connect uploads."
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+          xcodebuild -version
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -111,23 +139,15 @@ jobs:
         id: signing
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
-          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
-          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
-          IOS_PROVISIONING_PROFILE_SPECIFIER: ${{ secrets.IOS_PROVISIONING_PROFILE_SPECIFIER }}
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
-          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
         run: |
           required=(
             APPLE_TEAM_ID
-            IOS_DISTRIBUTION_CERTIFICATE_BASE64
-            IOS_DISTRIBUTION_CERTIFICATE_PASSWORD
-            IOS_PROVISIONING_PROFILE_BASE64
-            IOS_PROVISIONING_PROFILE_SPECIFIER
-            APP_STORE_CONNECT_API_KEY_ID
-            APP_STORE_CONNECT_API_ISSUER_ID
-            APP_STORE_CONNECT_API_PRIVATE_KEY
+            APP_STORE_CONNECT_ISSUER_ID
+            APP_STORE_CONNECT_KEY_ID
+            APP_STORE_CONNECT_API_KEY
           )
 
           missing=()
@@ -150,66 +170,54 @@ jobs:
         working-directory: app
         run: |
           xcodebuild \
-            -workspace ../ios/App/App.xcworkspace \
-            -scheme App \
+            -workspace "$IOS_WORKSPACE" \
+            -scheme "$IOS_SCHEME" \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Import Apple signing assets
+      - name: Write App Store Connect API key
         if: steps.signing.outputs.configured == 'true' && github.event_name != 'pull_request'
         env:
-          IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
-          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
-          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
         run: |
-          CERTIFICATE_PATH="$RUNNER_TEMP/distribution_certificate.p12"
-          PROFILE_PATH="$RUNNER_TEMP/flexible_reminder.mobileprovision"
-          PROFILE_PLIST="$RUNNER_TEMP/profile.plist"
-          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
-          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
-
-          echo "$IOS_DISTRIBUTION_CERTIFICATE_BASE64" | base64 --decode -o "$CERTIFICATE_PATH"
-          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode -o "$PROFILE_PATH"
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERTIFICATE_PATH" -P "$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security default-keychain -s "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH"
-
-          security cms -D -i "$PROFILE_PATH" > "$PROFILE_PLIST"
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$PROFILE_PLIST")
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          mkdir -p "$RUNNER_TEMP/appstoreconnect"
+          API_KEY_PATH="$RUNNER_TEMP/appstoreconnect/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          printf '%s' "$APP_STORE_CONNECT_API_KEY" > "$API_KEY_PATH"
+          chmod 600 "$API_KEY_PATH"
 
       - name: Archive signed iOS app
         if: steps.signing.outputs.configured == 'true' && github.event_name != 'pull_request'
         working-directory: app
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          IOS_PROVISIONING_PROFILE_SPECIFIER: ${{ secrets.IOS_PROVISIONING_PROFILE_SPECIFIER }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
         run: |
           xcodebuild \
-            -workspace ../ios/App/App.xcworkspace \
-            -scheme App \
+            -workspace "$IOS_WORKSPACE" \
+            -scheme "$IOS_SCHEME" \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/FlexibleReminder.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/appstoreconnect/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8" \
+            -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            PRODUCT_BUNDLE_IDENTIFIER=com.hdduong.flexiblereminder \
-            CODE_SIGN_STYLE=Manual \
-            PROVISIONING_PROFILE_SPECIFIER="$IOS_PROVISIONING_PROFILE_SPECIFIER" \
+            PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID" \
+            CODE_SIGN_STYLE=Automatic \
             archive
 
       - name: Export IPA
         if: steps.signing.outputs.configured == 'true' && github.event_name != 'pull_request'
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          IOS_PROVISIONING_PROFILE_SPECIFIER: ${{ secrets.IOS_PROVISIONING_PROFILE_SPECIFIER }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
         run: |
           EXPORT_OPTIONS="$RUNNER_TEMP/ExportOptions.plist"
           cat > "$EXPORT_OPTIONS" <<PLIST
@@ -222,12 +230,9 @@ jobs:
             <key>teamID</key>
             <string>$APPLE_TEAM_ID</string>
             <key>signingStyle</key>
-            <string>manual</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>com.hdduong.flexiblereminder</key>
-              <string>$IOS_PROVISIONING_PROFILE_SPECIFIER</string>
-            </dict>
+            <string>automatic</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
           </dict>
           </plist>
           PLIST
@@ -236,7 +241,22 @@ jobs:
             -exportArchive \
             -archivePath "$RUNNER_TEMP/FlexibleReminder.xcarchive" \
             -exportPath "$RUNNER_TEMP/testflight" \
-            -exportOptionsPlist "$EXPORT_OPTIONS"
+            -exportOptionsPlist "$EXPORT_OPTIONS" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/appstoreconnect/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8" \
+            -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
+
+      - name: Locate exported IPA
+        if: steps.signing.outputs.configured == 'true' && github.event_name != 'pull_request'
+        id: ipa
+        run: |
+          IPA_PATH="$(find "$RUNNER_TEMP/testflight" -name '*.ipa' -print -quit)"
+          if [ -z "$IPA_PATH" ]; then
+            echo "::error::No IPA was exported for TestFlight upload."
+            exit 1
+          fi
+          echo "path=$IPA_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Upload IPA artifact
         if: steps.signing.outputs.configured == 'true' && github.event_name != 'pull_request'
@@ -248,28 +268,12 @@ jobs:
 
       - name: Upload to TestFlight
         if: steps.signing.outputs.configured == 'true' && github.event_name != 'pull_request'
-        env:
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
-          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
-        run: |
-          mkdir -p "$HOME/.appstoreconnect/private_keys"
-          API_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
-          printf '%s' "$APP_STORE_CONNECT_API_PRIVATE_KEY" > "$API_KEY_PATH"
-          chmod 600 "$API_KEY_PATH"
-
-          IPA_PATH="$(find "$RUNNER_TEMP/testflight" -name '*.ipa' -print -quit)"
-          if [ -z "$IPA_PATH" ]; then
-            echo "::error::No IPA was exported for TestFlight upload."
-            exit 1
-          fi
-
-          xcrun altool \
-            --upload-app \
-            --type ios \
-            --file "$IPA_PATH" \
-            --apiKey "$APP_STORE_CONNECT_API_KEY_ID" \
-            --apiIssuer "$APP_STORE_CONNECT_API_ISSUER_ID"
+        uses: apple-actions/upload-testflight-build@v3
+        with:
+          app-path: ${{ steps.ipa.outputs.path }}
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          api-private-key: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
 
       - name: Upload generated iOS project
         if: always()
