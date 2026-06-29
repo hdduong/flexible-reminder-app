@@ -58,7 +58,7 @@ builds the Vite app, runs Vitest and Playwright, adds or syncs the Capacitor iOS
 project, then:
 
 - builds an unsigned simulator app when signing secrets are missing
-- archives, exports an IPA, and uploads to TestFlight with Xcode automatic signing when App Store Connect API secrets are configured
+- archives, exports an IPA, and uploads to TestFlight with manual Apple signing assets when all signing secrets are configured
 - uploads the Playwright report and test screenshots as workflow artifacts
 - uploads the generated `ios/` project as a workflow artifact for inspection
 
@@ -68,14 +68,17 @@ uploads are built with a current App Store Connect SDK.
 Required repository secrets for signed TestFlight uploads:
 
 - `APPLE_TEAM_ID`
+- `IOS_DISTRIBUTION_CERTIFICATE_BASE64`
+- `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD`
+- `IOS_PROVISIONING_PROFILE_BASE64`
 - `APP_STORE_CONNECT_ISSUER_ID`
 - `APP_STORE_CONNECT_KEY_ID`
 - `APP_STORE_CONNECT_API_KEY`
 
 `APP_STORE_CONNECT_API_KEY` is the full contents of the downloaded `.p8` key,
-including the `BEGIN PRIVATE KEY` and `END PRIVATE KEY` lines. The signed path
-uses Xcode automatic signing with `-allowProvisioningUpdates`, so GitHub does
-not need a manually exported `.p12` certificate or `.mobileprovision` profile.
+including the `BEGIN PRIVATE KEY` and `END PRIVATE KEY` lines. The manual
+signing secrets contain the base64-encoded `.p12` certificate, its password, and
+the base64-encoded App Store Connect provisioning profile.
 
 Without those secrets, the workflow still validates the web build and generated
 iOS project with an unsigned simulator build.
