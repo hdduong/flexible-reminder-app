@@ -83,3 +83,25 @@ the base64-encoded App Store Connect provisioning profile.
 
 Without those secrets, the workflow still validates the web build and generated
 iOS project with an unsigned simulator build.
+
+### iOS Versioning
+
+The user-facing iOS version comes from `app/package.json` by default. For a new
+release, bump that version first:
+
+```sh
+cd app
+npm version patch --no-git-tag-version
+```
+
+Use `minor` or `major` instead of `patch` when the release needs a larger
+version bump. The workflow resolves:
+
+- `MARKETING_VERSION` from `app/package.json` or the manual
+  `marketing_version` workflow input
+- `CURRENT_PROJECT_VERSION` from the manual `build_number` workflow input or
+  `github.run_number.github.run_attempt`
+
+Apple still requires each upload within the same app version to have a unique
+build number, so the build value continues to increase even though the visible
+release version is controlled separately.

@@ -2,6 +2,15 @@ name: iOS TestFlight
 
 on:
   workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: Optional iOS/App Store version, such as 1.0.0. Leave blank to use app/package.json.
+        required: false
+        type: string
+      build_number:
+        description: Optional iOS build number. Leave blank to use GitHub run number and run attempt.
+        required: false
+        type: string
   pull_request:
     paths:
       - 'app/**'
@@ -30,7 +39,6 @@ permissions:
 
 env:
   IOS_BUNDLE_ID: com.hdduong.flexiblereminder
-  IOS_BUILD_NUMBER: ${{ github.run_number }}
   IOS_SCHEME: App
   IOS_PROJECT: ../ios/App/App.xcodeproj
   IOS_WORKSPACE: ../ios/App/App.xcworkspace
@@ -98,6 +106,13 @@ jobs:
           else
             npm install
           fi
+
+      - name: Resolve iOS App Store version
+        working-directory: app
+        env:
+          IOS_MARKETING_VERSION_INPUT: ${{ github.event.inputs.marketing_version }}
+          IOS_BUILD_NUMBER_INPUT: ${{ github.event.inputs.build_number }}
+        run: node scripts/resolve-ios-version.mjs
 
       - name: Build Vite app
         working-directory: app
@@ -269,6 +284,7 @@ jobs:
               '"CODE_SIGN_IDENTITY[sdk=iphoneos*]"': quote("Apple Distribution"),
               "CURRENT_PROJECT_VERSION": os.environ["IOS_BUILD_NUMBER"],
               "DEVELOPMENT_TEAM": os.environ["APPLE_TEAM_ID"],
+              "MARKETING_VERSION": os.environ["IOS_MARKETING_VERSION"],
               "PROVISIONING_PROFILE": quote(os.environ["IOS_PROFILE_UUID"]),
               "PROVISIONING_PROFILE_SPECIFIER": quote(os.environ["IOS_PROFILE_UUID"]),
           }
