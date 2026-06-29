@@ -186,8 +186,20 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/appstoreconnect"
           API_KEY_PATH="$RUNNER_TEMP/appstoreconnect/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
-          printf '%s' "$APP_STORE_CONNECT_API_KEY" > "$API_KEY_PATH"
+          export API_KEY_PATH
+          python3 <<'PY'
+          import os
+          from pathlib import Path
+
+          key = os.environ["APP_STORE_CONNECT_API_KEY"]
+          if "\\n" in key and "\n" not in key:
+              key = key.replace("\\n", "\n")
+          key = key.replace("\r\n", "\n").replace("\r", "\n").strip() + "\n"
+
+          Path(os.environ["API_KEY_PATH"]).write_text(key)
+          PY
           chmod 600 "$API_KEY_PATH"
+          openssl pkey -in "$API_KEY_PATH" -noout > /dev/null
 
       - name: Archive signed iOS app
         if: steps.signing.outputs.configured == 'true' && github.event_name != 'pull_request'
