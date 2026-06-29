@@ -30,6 +30,7 @@ permissions:
 
 env:
   IOS_BUNDLE_ID: com.hdduong.flexiblereminder
+  IOS_BUILD_NUMBER: ${{ github.run_number }}
   IOS_SCHEME: App
   IOS_PROJECT: ../ios/App/App.xcodeproj
   IOS_WORKSPACE: ../ios/App/App.xcworkspace
@@ -235,6 +236,7 @@ jobs:
         working-directory: app
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          IOS_BUILD_NUMBER: ${{ env.IOS_BUILD_NUMBER }}
           IOS_PROFILE_UUID: ${{ steps.signing_assets.outputs.profile_uuid }}
         run: |
           python3 <<'PY'
@@ -264,6 +266,7 @@ jobs:
               "CODE_SIGN_STYLE": "Manual",
               "CODE_SIGN_IDENTITY": quote("Apple Distribution"),
               '"CODE_SIGN_IDENTITY[sdk=iphoneos*]"': quote("Apple Distribution"),
+              "CURRENT_PROJECT_VERSION": os.environ["IOS_BUILD_NUMBER"],
               "DEVELOPMENT_TEAM": os.environ["APPLE_TEAM_ID"],
               "PROVISIONING_PROFILE": quote(os.environ["IOS_PROFILE_UUID"]),
               "PROVISIONING_PROFILE_SPECIFIER": quote(os.environ["IOS_PROFILE_UUID"]),
