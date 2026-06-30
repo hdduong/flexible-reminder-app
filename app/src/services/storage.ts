@@ -1,6 +1,7 @@
 import type { AppSettings, Reminder, ReminderEvent } from "../types";
 import { Capacitor } from "@capacitor/core";
 import { DEFAULT_SCHEMA_VERSION, createDefaultSettings } from "../types";
+import { NativeTimeoutError, withNativeTimeout } from "./nativeTimeout";
 
 export const STORAGE_KEYS = {
   settings: "settings:v1",
@@ -102,10 +103,13 @@ export async function removeStoredValue(key: string): Promise<void> {
 
   if (preferences) {
     try {
-      await preferences.remove({ key });
+      await withNativeTimeout(
+        preferences.remove({ key }),
+        `Preferences.remove(${formatStorageKey(key)})`,
+      );
       return;
-    } catch {
-      preferencesPromise = Promise.resolve(null);
+    } catch (error) {
+      disablePreferencesAfterPermanentFailure(error);
     }
   }
 
@@ -122,9 +126,14 @@ async function readRawValue(key: string): Promise<string | null> {
 
   if (preferences) {
     try {
-      return (await preferences.get({ key })).value;
-    } catch {
-      preferencesPromise = Promise.resolve(null);
+      return (
+        await withNativeTimeout(
+          preferences.get({ key }),
+          `Preferences.get(${formatStorageKey(key)})`,
+        )
+      ).value;
+    } catch (error) {
+      disablePreferencesAfterPermanentFailure(error);
     }
   }
 
@@ -140,10 +149,13 @@ async function writeRawValue(key: string, value: string): Promise<void> {
 
   if (preferences) {
     try {
-      await preferences.set({ key, value });
+      await withNativeTimeout(
+        preferences.set({ key, value }),
+        `Preferences.set(${formatStorageKey(key)})`,
+      );
       return;
-    } catch {
-      preferencesPromise = Promise.resolve(null);
+    } catch (error) {
+      disablePreferencesAfterPermanentFailure(error);
     }
   }
 
@@ -160,7 +172,15 @@ async function getPreferencesPlugin(): Promise<PreferencesPlugin | null> {
     preferencesPromise = loadPreferencesPlugin();
   }
 
-  return preferencesPromise;
+  try {
+    return await withNativeTimeout(
+      preferencesPromise,
+      "Preferences plugin load",
+    );
+  } catch (error) {
+    disablePreferencesAfterPermanentFailure(error);
+    return null;
+  }
 }
 
 async function loadPreferencesPlugin(): Promise<PreferencesPlugin | null> {
@@ -182,5 +202,15 @@ function hasLocalStorage(): boolean {
     return typeof globalThis.localStorage !== "undefined";
   } catch {
     return false;
+  }
+}
+
+function formatStorageKey(key: string): string {
+  return JSON.stringify(key);
+}
+
+function disablePreferencesAfterPermanentFailure(error: unknown): void {
+  if (!(error instanceof NativeTimeoutError)) {
+    preferencesPromise = Promise.resolve(null);
   }
 }
