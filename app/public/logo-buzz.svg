@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Flexible Reminder buzz logo</title>
+  <desc id="desc">A warm terracotta reminder pulse with vibration arcs.</desc>
+  <defs>
+    <linearGradient id="terracotta" x1="354" y1="320" x2="682" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#D97950" />
+      <stop offset="1" stop-color="#A9472A" />
+    </linearGradient>
+    <linearGradient id="paper" x1="120" y1="96" x2="904" y2="928" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FCFAF7" />
+      <stop offset="1" stop-color="#F1E6D6" />
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#paper)" />
+  <circle cx="512" cy="512" r="344" fill="#F7EFE4" />
+  <circle cx="512" cy="512" r="210" fill="#EADCC8" />
+  <path
+    d="M268 250c-78 66-124 158-124 262s46 196 124 262M756 250c78 66 124 158 124 262s-46 196-124 262"
+    fill="none"
+    stroke="#C9862F"
+    stroke-width="54"
+    stroke-linecap="round"
+  />
+  <path
+    d="M350 350c-42 42-66 99-66 162s24 120 66 162M674 350c42 42 66 99 66 162s-24 120-66 162"
+    fill="none"
+    stroke="#6F7D5F"
+    stroke-width="48"
+    stroke-linecap="round"
+  />
+  <path
+    d="M418 424c-24 25-38 56-38 88s14 63 38 88M606 424c24 25 38 56 38 88s-14 63-38 88"
+    fill="none"
+    stroke="#CF623B"
+    stroke-width="42"
+    stroke-linecap="round"
+  />
+  <circle cx="512" cy="512" r="136" fill="url(#terracotta)" />
+  <circle cx="512" cy="512" r="48" fill="#FCFAF7" />
+  <circle cx="512" cy="512" r="18" fill="#2B1B12" opacity=".34" />
+</svg>

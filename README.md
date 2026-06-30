@@ -48,7 +48,24 @@ npx cap add ios
 npx cap sync ios
 ```
 
-The logo asset lives at `app/public/logo-lock-buzz.svg`.
+The buzz logo source lives at `app/public/logo-buzz.svg`. Generated
+web PNGs live in `app/public/`, and the generated iOS AppIcon set lives in
+`app/resources/app-icon/AppIcon.appiconset`.
+
+Regenerate icon assets from the SVG:
+
+```sh
+cd app
+npx playwright install chromium
+npm run icons:generate
+```
+
+After creating or syncing the Capacitor iOS project, install the iOS AppIcon
+assets:
+
+```sh
+npm run icons:install-ios
+```
 
 ## iOS GitHub Actions
 

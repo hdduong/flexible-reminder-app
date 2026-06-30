@@ -81,7 +81,7 @@ button {
   text-align: center;
 }
 
-.loading-phone .lock-buzz-logo {
+.loading-phone .buzz-logo {
   height: 58px;
   width: 58px;
 }
@@ -174,14 +174,18 @@ button {
   letter-spacing: 0.01em;
 }
 
-.lock-buzz-logo {
+.buzz-logo {
   color: var(--terracotta);
   height: 30px;
   width: 30px;
 }
 
-.lock-buzz-logo rect {
+.buzz-core {
   fill: currentColor;
+}
+
+.buzz-dot {
+  fill: var(--paper);
 }
 
 .buzz-line {
@@ -498,7 +502,7 @@ select:focus {
   padding: 18px;
 }
 
-.permission-card .lock-buzz-logo {
+.permission-card .buzz-logo {
   background: rgba(255, 255, 255, 0.55);
   border-radius: 18px;
   flex: 0 0 auto;
