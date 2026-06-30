@@ -1,5 +1,6 @@
 import type { AppSettings, Reminder, ReminderEvent } from "../types";
 import { Capacitor } from "@capacitor/core";
+import { Preferences } from "@capacitor/preferences";
 import { DEFAULT_SCHEMA_VERSION, createDefaultSettings } from "../types";
 import { NativeTimeoutError, withNativeTimeout } from "./nativeTimeout";
 
@@ -13,10 +14,6 @@ interface PreferencesPlugin {
   get(options: { key: string }): Promise<{ value: string | null }>;
   set(options: { key: string; value: string }): Promise<void>;
   remove(options: { key: string }): Promise<void>;
-}
-
-interface PreferencesModule {
-  Preferences?: PreferencesPlugin;
 }
 
 const memoryStore = new Map<string, string>();
@@ -188,13 +185,10 @@ async function loadPreferencesPlugin(): Promise<PreferencesPlugin | null> {
     return null;
   }
 
-  try {
-    const module = (await import("@capacitor/preferences")) as PreferencesModule;
-
-    return module.Preferences ?? null;
-  } catch {
-    return null;
-  }
+  // Statically imported so the native bridge is available immediately. A
+  // dynamic import() here can hang in the iOS WKWebView when the lazy chunk
+  // fails to load, which froze the app on the loading screen.
+  return Preferences as unknown as PreferencesPlugin;
 }
 
 function hasLocalStorage(): boolean {
