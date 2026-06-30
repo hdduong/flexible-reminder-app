@@ -22,6 +22,10 @@ import {
   listTodayOccurrences as listScheduledTodayOccurrences,
   previewSchedule as previewReminderSchedule,
 } from "./services/schedule";
+import {
+  requestNotificationPermission,
+  rescheduleAllNotifications,
+} from "./services/notifications";
 
 type RepeatMode = "interval" | "exact_times";
 type Tab = "today" | "reminders" | "settings";
@@ -127,6 +131,18 @@ function App() {
     void bootstrap();
   }, []);
 
+  useEffect(() => {
+    // Refresh the scheduled-notification queue whenever the app returns to the
+    // foreground, so reminders keep firing past the bounded lookahead window.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void rescheduleAllNotifications();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
   async function bootstrap() {
     setIsLoading(true);
     setErrorMessage(null);
@@ -146,6 +162,21 @@ function App() {
       setErrorMessage(error instanceof Error ? error.message : "Unable to load reminders.");
     } finally {
       setIsLoading(false);
+    }
+
+    // Best-effort, after the UI is shown: ask for notification permission (the
+    // OS prompt only appears the first time) and schedule the stored reminders.
+    // Nothing here blocks loading, and failures are non-fatal.
+    void enableNotifications();
+  }
+
+  async function enableNotifications() {
+    try {
+      await requestNotificationPermission();
+      setSettings(await getSettings());
+      await rescheduleAllNotifications();
+    } catch {
+      // Notifications are best-effort; the app still works without them.
     }
   }
 
