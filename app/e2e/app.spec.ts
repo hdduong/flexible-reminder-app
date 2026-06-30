@@ -1,4 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
+
+test.describe.configure({ mode: "serial" });
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -55,10 +57,21 @@ test("supports free-text reminder creation", async ({ page }, testInfo) => {
   await page.getByPlaceholder("Try bathroom").fill("Stretch legs");
   await page.getByRole("button", { name: "Save Reminder" }).click();
 
+  await expect(page.getByRole("status")).toHaveText("Reminder saved.");
   await expect(page.locator(".saved-list")).toContainText("Stretch legs");
   await expect(page.locator(".saved-list")).toContainText("every 1 hour 45 min");
 
-  await page.getByRole("button", { name: /Stretch legs/ }).click();
+  const saveScreenshot = await page.screenshot({
+    fullPage: true,
+    path: testInfo.outputPath("save-confirmation-mobile.png"),
+  });
+
+  await testInfo.attach("save-confirmation-mobile", {
+    body: saveScreenshot,
+    contentType: "image/png",
+  });
+
+  await page.locator(".saved-row-main", { hasText: "Stretch legs" }).click();
   await expect(page.getByRole("heading", { name: "Edit Reminder" })).toBeVisible();
   await expect(page.getByLabel("Repeat hours")).toHaveValue("1");
   await expect(page.getByLabel("Repeat minutes")).toHaveValue("45");
@@ -67,7 +80,37 @@ test("supports free-text reminder creation", async ({ page }, testInfo) => {
   await page.getByLabel("Repeat minutes").selectOption("20");
   await page.getByRole("button", { name: "Save Changes" }).click();
 
+  await expect(page.getByRole("status")).toHaveText("Changes saved.");
   await expect(page.locator(".saved-list")).toContainText("every 20 min");
+});
+
+test("removes saved reminders with a swipe action", async ({
+  page,
+}, testInfo) => {
+  await page.getByRole("button", { name: "Reminders" }).click();
+
+  const savedList = page.locator(".saved-list");
+  const starterRow = savedList.locator(".swipe-row", {
+    hasText: "Try bathroom",
+  });
+  await expect(starterRow).toBeVisible();
+
+  await swipeLeft(starterRow);
+
+  const screenshot = await page.screenshot({
+    fullPage: true,
+    path: testInfo.outputPath("swipe-remove-mobile.png"),
+  });
+
+  await testInfo.attach("swipe-remove-mobile", {
+    body: screenshot,
+    contentType: "image/png",
+  });
+
+  await page.getByRole("button", { name: "Remove Try bathroom" }).click();
+
+  await expect(savedList).not.toContainText("Try bathroom");
+  await expect(savedList).toContainText("Drink water");
 });
 
 test("shows privacy and snooze settings", async ({ page }) => {
@@ -79,3 +122,22 @@ test("shows privacy and snooze settings", async ({ page }) => {
   await expect(page.locator(".settings-list")).toContainText("Privacy mode");
   await expect(page.locator(".settings-list")).toContainText("Export data");
 });
+
+async function swipeLeft(locator: Locator) {
+  await locator.scrollIntoViewIfNeeded();
+  const box = await locator.boundingBox();
+
+  if (!box) {
+    throw new Error("Unable to find row bounds for swipe.");
+  }
+
+  const startX = box.x + box.width * 0.68;
+  const endX = startX - 132;
+  const y = box.y + box.height / 2;
+  const page = locator.page();
+
+  await page.mouse.move(startX, y);
+  await page.mouse.down();
+  await page.mouse.move(endX, y, { steps: 8 });
+  await page.mouse.up();
+}

@@ -448,21 +448,74 @@ select:focus {
   display: inline-flex;
 }
 
-.error-message {
-  background: #fff0e8;
+.error-message,
+.success-message {
   border: 1px solid #e2a083;
   border-radius: 14px;
-  color: var(--terracotta-dark);
   font-size: 0.82rem;
   font-weight: 800;
   line-height: 1.35;
   padding: 11px 12px;
 }
 
+.error-message {
+  background: #fff0e8;
+  color: var(--terracotta-dark);
+}
+
+.success-message {
+  background: #eef7e9;
+  border-color: #b9c9a8;
+  color: #4f6846;
+}
+
 .saved-row {
   grid-template-columns: 1fr auto;
   text-align: left;
   width: 100%;
+}
+
+.swipe-row {
+  border-radius: 18px;
+  overflow: hidden;
+  position: relative;
+}
+
+.swipe-row.remove-open .saved-row {
+  border-right-color: transparent;
+  border-radius: 18px 0 0 18px;
+}
+
+.swipe-row .saved-row {
+  position: relative;
+  touch-action: pan-y;
+  transition: transform 180ms ease;
+  z-index: 1;
+}
+
+.saved-row-main {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.remove-reminder-button {
+  align-items: center;
+  background: var(--terracotta);
+  border: 0;
+  border-radius: 0;
+  color: var(--white);
+  display: flex;
+  font-size: 0.82rem;
+  font-weight: 900;
+  inset: 0 0 0 auto;
+  justify-content: center;
+  position: absolute;
+  width: 96px;
+  z-index: 0;
 }
 
 .switch {
