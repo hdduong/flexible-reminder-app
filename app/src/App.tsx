@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppSettings,
   CreateReminderInput,
@@ -10,6 +10,7 @@ import type {
 import { createDefaultSettings } from "./types";
 import {
   createReminder,
+  deleteReminder,
   listReminders,
   markDone,
   setReminderEnabled,
@@ -56,6 +57,8 @@ const appVersion = import.meta.env.VITE_APP_VERSION;
 const repeatHourOptions = Array.from({ length: 25 }, (_, hour) => hour);
 const repeatMinuteOptions = Array.from({ length: 60 }, (_, minute) => minute);
 const maxRepeatIntervalMinutes = 24 * 60;
+const swipeRevealPixels = 96;
+const swipeOpenThresholdPixels = 44;
 
 const starterInputs: CreateReminderInput[] = [
   {
@@ -207,6 +210,28 @@ function App() {
     await refreshReminders();
   }
 
+  async function removeReminder(id: string) {
+    setErrorMessage(null);
+
+    try {
+      await deleteReminder(id);
+
+      if (editingId === id) {
+        setEditingId(null);
+        setDraft({
+          ...newReminderTemplate,
+          snoozeMinutes: settings.defaultSnoozeMinutes,
+        });
+      }
+
+      await refreshReminders();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Unable to remove reminder.",
+      );
+    }
+  }
+
   async function handleOccurrenceAction(action: "done" | "later" | "skip", occurrence: DisplayOccurrence) {
     setDismissedOccurrenceIds((current) => [...new Set([...current, occurrence.id])]);
 
@@ -265,6 +290,7 @@ function App() {
               onSave={saveReminder}
               onEdit={editReminder}
               onToggle={toggleReminder}
+              onDelete={removeReminder}
               onNew={openNewReminder}
             />
           )}
@@ -372,6 +398,7 @@ function RemindersScreen({
   onSave,
   onEdit,
   onToggle,
+  onDelete,
   onNew,
 }: {
   reminders: Reminder[];
@@ -383,6 +410,7 @@ function RemindersScreen({
   onSave: () => void;
   onEdit: (reminder: Reminder) => void;
   onToggle: (id: string, enabled: boolean) => void;
+  onDelete: (id: string) => void;
   onNew: () => void;
 }) {
   return (
@@ -480,16 +508,13 @@ function RemindersScreen({
         <div className="section-title">Saved reminders</div>
         <div className="saved-list">
           {reminders.map((reminder) => (
-            <button key={reminder.id} className="saved-row" onClick={() => onEdit(reminder)}>
-              <div>
-                <strong>{reminder.text}</strong>
-                <span>{summarizeReminder(reminder)}</span>
-              </div>
-              <label className="switch" onClick={(event) => event.stopPropagation()}>
-                <input type="checkbox" checked={reminder.enabled} onChange={(event) => void onToggle(reminder.id, event.target.checked)} />
-                <span />
-              </label>
-            </button>
+            <SwipeableReminderRow
+              key={reminder.id}
+              reminder={reminder}
+              onEdit={onEdit}
+              onToggle={onToggle}
+              onDelete={onDelete}
+            />
           ))}
         </div>
       </section>
@@ -565,6 +590,127 @@ function SettingsRow({ label, value, children }: { label: string; value: string;
         <span>{value}</span>
       </div>
       {children}
+    </div>
+  );
+}
+
+function SwipeableReminderRow({
+  reminder,
+  onEdit,
+  onToggle,
+  onDelete,
+}: {
+  reminder: Reminder;
+  onEdit: (reminder: Reminder) => void;
+  onToggle: (id: string, enabled: boolean) => void;
+  onDelete: (id: string) => void;
+}) {
+  const dragStartX = useRef<number | null>(null);
+  const dragStartOffset = useRef(0);
+  const didSwipe = useRef(false);
+  const [isRemoveOpen, setIsRemoveOpen] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
+  const currentOffset =
+    dragStartX.current === null
+      ? isRemoveOpen
+        ? -swipeRevealPixels
+        : 0
+      : dragOffset;
+
+  function closeRemoveAction() {
+    setIsRemoveOpen(false);
+    setDragOffset(0);
+  }
+
+  function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement;
+
+    if (target.closest(".switch")) {
+      return;
+    }
+
+    dragStartX.current = event.clientX;
+    dragStartOffset.current = isRemoveOpen ? -swipeRevealPixels : 0;
+    setDragOffset(dragStartOffset.current);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (dragStartX.current === null) {
+      return;
+    }
+
+    const delta = event.clientX - dragStartX.current;
+    const nextOffset = Math.max(
+      -swipeRevealPixels,
+      Math.min(0, dragStartOffset.current + delta),
+    );
+
+    setDragOffset(nextOffset);
+  }
+
+  function finishSwipe() {
+    if (dragStartX.current === null) {
+      return;
+    }
+
+    didSwipe.current =
+      Math.abs(dragOffset - dragStartOffset.current) > 8;
+    const shouldOpen = dragOffset <= -swipeOpenThresholdPixels;
+    dragStartX.current = null;
+    setIsRemoveOpen(shouldOpen);
+    setDragOffset(shouldOpen ? -swipeRevealPixels : 0);
+  }
+
+  function handleEdit() {
+    if (didSwipe.current) {
+      didSwipe.current = false;
+      return;
+    }
+
+    if (isRemoveOpen) {
+      closeRemoveAction();
+      return;
+    }
+
+    onEdit(reminder);
+  }
+
+  return (
+    <div className={isRemoveOpen ? "swipe-row remove-open" : "swipe-row"}>
+      <button
+        className="remove-reminder-button"
+        onClick={() => onDelete(reminder.id)}
+        aria-label={`Remove ${reminder.text}`}
+        aria-hidden={!isRemoveOpen}
+        tabIndex={isRemoveOpen ? 0 : -1}
+      >
+        Remove
+      </button>
+      <div
+        className="saved-row"
+        style={{ transform: `translateX(${currentOffset}px)` }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={finishSwipe}
+        onPointerCancel={finishSwipe}
+      >
+        <button className="saved-row-main" onClick={handleEdit}>
+          <div>
+            <strong>{reminder.text}</strong>
+            <span>{summarizeReminder(reminder)}</span>
+          </div>
+        </button>
+        <label className="switch">
+          <input
+            type="checkbox"
+            checked={reminder.enabled}
+            onChange={(event) => void onToggle(reminder.id, event.target.checked)}
+            aria-label={`${reminder.text} enabled`}
+          />
+          <span />
+        </label>
+      </div>
     </div>
   );
 }
