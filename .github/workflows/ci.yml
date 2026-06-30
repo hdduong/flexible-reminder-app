@@ -5,12 +5,14 @@ on:
     paths:
       - 'app/**'
       - '.github/workflows/ci.yml'
+      - '.github/workflows/ios-testflight.yml'
   push:
     branches:
       - main
     paths:
       - 'app/**'
       - '.github/workflows/ci.yml'
+      - '.github/workflows/ios-testflight.yml'
 
 permissions:
   contents: read

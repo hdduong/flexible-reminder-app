@@ -12,9 +12,11 @@ on:
         required: false
         type: string
 
-# TestFlight builds are intentionally manual only: trigger this from the
-# Actions tab ("Run workflow") on main. Pushes and PRs run the CI workflow
-# (.github/workflows/ci.yml) instead, which only builds and runs the tests.
+# TestFlight builds are intentionally manual only (workflow_dispatch): run this
+# from the Actions tab. Dispatching from main builds, signs, and uploads to
+# TestFlight; dispatching from any other branch only builds + tests, since the
+# signed-upload steps are gated on the main ref. Pushes and PRs run the CI
+# workflow (.github/workflows/ci.yml) instead, which only builds and tests.
 
 permissions:
   contents: read
