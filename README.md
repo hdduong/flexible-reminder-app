@@ -48,7 +48,7 @@ npx cap add ios
 npx cap sync ios
 ```
 
-The lock-buzz logo source lives at `app/public/logo-lock-buzz.svg`. Generated
+The buzz logo source lives at `app/public/logo-buzz.svg`. Generated
 web PNGs live in `app/public/`, and the generated iOS AppIcon set lives in
 `app/resources/app-icon/AppIcon.appiconset`.
 

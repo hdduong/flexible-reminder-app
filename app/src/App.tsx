@@ -229,7 +229,7 @@ function App() {
     return (
       <main className="app-shell">
         <section className="phone loading-phone">
-          <LockBuzzLogo />
+          <BuzzLogo />
           <strong>Loading reminders...</strong>
         </section>
       </main>
@@ -288,13 +288,13 @@ function StatusBar() {
   );
 }
 
-function LockBuzzLogo() {
+function BuzzLogo() {
   return (
-    <svg className="lock-buzz-logo" viewBox="0 0 64 64" role="img" aria-label="Lock Buzz logo">
-      <path className="buzz-line" d="M9 25 3 19M11 39 4 44M55 25l6-6M53 39l7 5" />
-      <path d="M22 29v-8c0-6 4-11 10-11s10 5 10 11v8" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <rect x="16" y="28" width="32" height="25" rx="8" />
-      <circle cx="32" cy="40" r="4" fill="var(--paper)" />
+    <svg className="buzz-logo" viewBox="0 0 64 64" role="img" aria-label="Buzz reminder logo">
+      <path className="buzz-line" d="M12 18c-5 4-8 9-8 14s3 10 8 14M52 18c5 4 8 9 8 14s-3 10-8 14" />
+      <path className="buzz-line" d="M19 24c-2.5 2.2-4 5-4 8s1.5 5.8 4 8M45 24c2.5 2.2 4 5 4 8s-1.5 5.8-4 8" />
+      <circle className="buzz-core" cx="32" cy="32" r="12" />
+      <circle className="buzz-dot" cx="32" cy="32" r="4.2" />
     </svg>
   );
 }
@@ -317,7 +317,7 @@ function TodayScreen({
       <header className="screen-header">
         <div>
           <div className="brand-row">
-            <LockBuzzLogo />
+            <BuzzLogo />
             <span>Flexible Reminder</span>
           </div>
           <h1>Today</h1>
@@ -523,7 +523,7 @@ function SettingsScreen({
       </header>
 
       <section className="permission-card">
-        <LockBuzzLogo />
+        <BuzzLogo />
         <div>
           <strong>Notifications {settings.notificationPermissionStatus === "granted" ? "allowed" : "not requested"}</strong>
           <span>Local iPhone reminders work offline.</span>

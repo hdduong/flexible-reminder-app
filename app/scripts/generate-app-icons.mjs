@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const logoSvg = await readFile(resolve(appRoot, "public/logo-lock-buzz.svg"), "utf8");
+const logoSvg = await readFile(resolve(appRoot, "public/logo-buzz.svg"), "utf8");
 const iosIconSet = resolve(appRoot, "resources/app-icon/AppIcon.appiconset");
 
 const webIcons = [
