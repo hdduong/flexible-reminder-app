@@ -465,6 +465,44 @@ select:focus {
   width: 100%;
 }
 
+.swipe-row {
+  border-radius: 18px;
+  overflow: hidden;
+  position: relative;
+}
+
+.swipe-row .saved-row {
+  position: relative;
+  touch-action: pan-y;
+  transition: transform 180ms ease;
+  z-index: 1;
+}
+
+.saved-row-main {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.remove-reminder-button {
+  align-items: center;
+  background: var(--terracotta);
+  border: 0;
+  border-radius: 0;
+  color: var(--white);
+  display: flex;
+  font-size: 0.82rem;
+  font-weight: 900;
+  inset: 0 0 0 auto;
+  justify-content: center;
+  position: absolute;
+  width: 96px;
+  z-index: 0;
+}
+
 .switch {
   display: inline-flex;
   height: 30px;
