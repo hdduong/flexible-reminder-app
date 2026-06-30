@@ -21,6 +21,7 @@ import {
 } from "./services/reminders";
 import { getSettings, updateSettings } from "./services/storage";
 import {
+  addDays,
   generateOccurrencesForReminder,
   listTodayOccurrences as listScheduledTodayOccurrences,
   previewSchedule as previewReminderSchedule,
@@ -898,7 +899,13 @@ function describeNextOccurrence(reminder: Reminder, now = new Date()): string {
   }
 
   try {
-    const [next] = generateOccurrencesForReminder(reminder, { from: now, limit: 1 });
+    // The next occurrence of any active schedule is always within a week, so
+    // bound the search instead of scanning the engine's default 30-day window.
+    const [next] = generateOccurrencesForReminder(reminder, {
+      from: now,
+      through: addDays(now, 8),
+      limit: 1,
+    });
     if (!next) {
       return "No upcoming times";
     }
@@ -917,7 +924,7 @@ function describeNextOccurrence(reminder: Reminder, now = new Date()): string {
     const weekday = new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(date);
     return `Next ${weekday} ${time}`;
   } catch {
-    return "";
+    return "Next time unavailable";
   }
 }
 
