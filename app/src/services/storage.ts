@@ -1,7 +1,7 @@
 import type { AppSettings, Reminder, ReminderEvent } from "../types";
 import { Capacitor } from "@capacitor/core";
 import { DEFAULT_SCHEMA_VERSION, createDefaultSettings } from "../types";
-import { withNativeTimeout } from "./nativeTimeout";
+import { NativeTimeoutError, withNativeTimeout } from "./nativeTimeout";
 
 export const STORAGE_KEYS = {
   settings: "settings:v1",
@@ -108,8 +108,8 @@ export async function removeStoredValue(key: string): Promise<void> {
         `Preferences.remove(${formatStorageKey(key)})`,
       );
       return;
-    } catch {
-      preferencesPromise = Promise.resolve(null);
+    } catch (error) {
+      disablePreferencesAfterPermanentFailure(error);
     }
   }
 
@@ -132,8 +132,8 @@ async function readRawValue(key: string): Promise<string | null> {
           `Preferences.get(${formatStorageKey(key)})`,
         )
       ).value;
-    } catch {
-      preferencesPromise = Promise.resolve(null);
+    } catch (error) {
+      disablePreferencesAfterPermanentFailure(error);
     }
   }
 
@@ -154,8 +154,8 @@ async function writeRawValue(key: string, value: string): Promise<void> {
         `Preferences.set(${formatStorageKey(key)})`,
       );
       return;
-    } catch {
-      preferencesPromise = Promise.resolve(null);
+    } catch (error) {
+      disablePreferencesAfterPermanentFailure(error);
     }
   }
 
@@ -177,8 +177,8 @@ async function getPreferencesPlugin(): Promise<PreferencesPlugin | null> {
       preferencesPromise,
       "Preferences plugin load",
     );
-  } catch {
-    preferencesPromise = Promise.resolve(null);
+  } catch (error) {
+    disablePreferencesAfterPermanentFailure(error);
     return null;
   }
 }
@@ -207,4 +207,10 @@ function hasLocalStorage(): boolean {
 
 function formatStorageKey(key: string): string {
   return JSON.stringify(key);
+}
+
+function disablePreferencesAfterPermanentFailure(error: unknown): void {
+  if (!(error instanceof NativeTimeoutError)) {
+    preferencesPromise = Promise.resolve(null);
+  }
 }
