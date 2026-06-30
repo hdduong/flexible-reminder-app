@@ -67,7 +67,7 @@ export async function createReminder(
   await saveReminders([...reminders, reminder]);
 
   if (reminder.enabled) {
-    await scheduleReminderNotifications(reminder.id);
+    scheduleReminderNotificationsInBackground(reminder.id);
   }
 
   return reminder;
@@ -321,4 +321,8 @@ function normalizeOptionalMinutes(
 
 function normalizeSchedule(schedule: ReminderSchedule): ReminderSchedule {
   return validateReminderSchedule(schedule);
+}
+
+function scheduleReminderNotificationsInBackground(reminderId: string): void {
+  void scheduleReminderNotifications(reminderId).catch(() => undefined);
 }

@@ -10,6 +10,7 @@ import {
   addDays,
   generateOccurrencesForReminder,
 } from "./schedule";
+import { withNativeTimeout } from "./nativeTimeout";
 
 const APP_NOTIFICATION_MARKER = "flexible-reminder";
 const REMINDER_ACTION_TYPE_ID = "reminder-actions";
@@ -69,7 +70,10 @@ export async function requestNotificationPermission(): Promise<
   let permissionStatus: "granted" | "denied" = "denied";
 
   try {
-    const response = await plugin.requestPermissions();
+    const response = await withNativeTimeout(
+      plugin.requestPermissions(),
+      "LocalNotifications.requestPermissions",
+    );
     const status = normalizePermissionStatus(response);
     permissionStatus = status === "granted" ? "granted" : "denied";
   } catch {
@@ -90,7 +94,12 @@ export async function getNotificationPermissionStatus(): Promise<
   }
 
   try {
-    return normalizePermissionStatus(await plugin.checkPermissions());
+    return normalizePermissionStatus(
+      await withNativeTimeout(
+        plugin.checkPermissions(),
+        "LocalNotifications.checkPermissions",
+      ),
+    );
   } catch {
     disableLocalNotificationsPlugin();
     return "denied";
@@ -223,11 +232,14 @@ export async function scheduleOccurrenceNotifications(
     .filter((occurrence) => new Date(occurrence.scheduledFor).getTime() >= now)
     .map((occurrence) =>
       toLocalNotification(reminder, occurrence, appSettings),
-    );
+  );
 
   if (notifications.length > 0) {
     try {
-      await plugin.schedule({ notifications });
+      await withNativeTimeout(
+        plugin.schedule({ notifications }),
+        "LocalNotifications.schedule",
+      );
     } catch {
       disableLocalNotificationsPlugin();
     }
@@ -319,18 +331,21 @@ async function ensureActionTypesRegistered(
   }
 
   try {
-    await plugin.registerActionTypes({
-      types: [
-        {
-          id: REMINDER_ACTION_TYPE_ID,
-          actions: [
-            { id: "done", title: "Done", foreground: false },
-            { id: "later10", title: "Later 10m", foreground: false },
-            { id: "skip", title: "Skip", foreground: false },
-          ],
-        },
-      ],
-    });
+    await withNativeTimeout(
+      plugin.registerActionTypes({
+        types: [
+          {
+            id: REMINDER_ACTION_TYPE_ID,
+            actions: [
+              { id: "done", title: "Done", foreground: false },
+              { id: "later10", title: "Later 10m", foreground: false },
+              { id: "skip", title: "Skip", foreground: false },
+            ],
+          },
+        ],
+      }),
+      "LocalNotifications.registerActionTypes",
+    );
     actionTypesRegistered = true;
   } catch {
     actionTypesRegistered = true;
@@ -342,7 +357,15 @@ async function getLocalNotificationsPlugin(): Promise<LocalNotificationsPlugin |
     localNotificationsPromise = loadLocalNotificationsPlugin();
   }
 
-  return localNotificationsPromise;
+  try {
+    return await withNativeTimeout(
+      localNotificationsPromise,
+      "LocalNotifications plugin load",
+    );
+  } catch {
+    disableLocalNotificationsPlugin();
+    return null;
+  }
 }
 
 async function getPendingNotifications(
@@ -353,7 +376,10 @@ async function getPendingNotifications(
   }
 
   try {
-    return await plugin.getPending();
+    return await withNativeTimeout(
+      plugin.getPending(),
+      "LocalNotifications.getPending",
+    );
   } catch {
     disableLocalNotificationsPlugin();
     return null;
@@ -369,7 +395,10 @@ async function cancelNotifications(
   }
 
   try {
-    await plugin.cancel({ notifications });
+    await withNativeTimeout(
+      plugin.cancel({ notifications }),
+      "LocalNotifications.cancel",
+    );
   } catch {
     disableLocalNotificationsPlugin();
   }

@@ -1,6 +1,7 @@
 import type { AppSettings, Reminder, ReminderEvent } from "../types";
 import { Capacitor } from "@capacitor/core";
 import { DEFAULT_SCHEMA_VERSION, createDefaultSettings } from "../types";
+import { withNativeTimeout } from "./nativeTimeout";
 
 export const STORAGE_KEYS = {
   settings: "settings:v1",
@@ -102,7 +103,10 @@ export async function removeStoredValue(key: string): Promise<void> {
 
   if (preferences) {
     try {
-      await preferences.remove({ key });
+      await withNativeTimeout(
+        preferences.remove({ key }),
+        `Preferences.remove(${key})`,
+      );
       return;
     } catch {
       preferencesPromise = Promise.resolve(null);
@@ -122,7 +126,12 @@ async function readRawValue(key: string): Promise<string | null> {
 
   if (preferences) {
     try {
-      return (await preferences.get({ key })).value;
+      return (
+        await withNativeTimeout(
+          preferences.get({ key }),
+          `Preferences.get(${key})`,
+        )
+      ).value;
     } catch {
       preferencesPromise = Promise.resolve(null);
     }
@@ -140,7 +149,10 @@ async function writeRawValue(key: string, value: string): Promise<void> {
 
   if (preferences) {
     try {
-      await preferences.set({ key, value });
+      await withNativeTimeout(
+        preferences.set({ key, value }),
+        `Preferences.set(${key})`,
+      );
       return;
     } catch {
       preferencesPromise = Promise.resolve(null);
@@ -160,7 +172,15 @@ async function getPreferencesPlugin(): Promise<PreferencesPlugin | null> {
     preferencesPromise = loadPreferencesPlugin();
   }
 
-  return preferencesPromise;
+  try {
+    return await withNativeTimeout(
+      preferencesPromise,
+      "Preferences plugin load",
+    );
+  } catch {
+    preferencesPromise = Promise.resolve(null);
+    return null;
+  }
 }
 
 async function loadPreferencesPlugin(): Promise<PreferencesPlugin | null> {
