@@ -132,10 +132,20 @@ function App() {
   const [dismissedOccurrenceIds, setDismissedOccurrenceIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     void bootstrap();
   }, []);
+
+  useEffect(() => {
+    if (!successMessage) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setSuccessMessage(null), 2600);
+    return () => window.clearTimeout(timeoutId);
+  }, [successMessage]);
 
   useEffect(() => {
     // Refresh the scheduled-notification queue whenever the app returns to the
@@ -210,17 +220,22 @@ function App() {
   function openNewReminder() {
     setEditingId(null);
     setDraft({ ...newReminderTemplate, snoozeMinutes: settings.defaultSnoozeMinutes });
+    setSuccessMessage(null);
     setTab("reminders");
   }
 
   function editReminder(reminder: Reminder) {
     setEditingId(reminder.id);
     setDraft(toDraft(reminder, settings.defaultSnoozeMinutes));
+    setSuccessMessage(null);
     setTab("reminders");
   }
 
   async function saveReminder() {
     setErrorMessage(null);
+    setSuccessMessage(null);
+    const wasEditing = Boolean(editingId);
+
     try {
       const input = toCreateInput(draft);
       if (editingId) {
@@ -231,6 +246,7 @@ function App() {
         setDraft(toDraft(saved, settings.defaultSnoozeMinutes));
       }
       await refreshReminders();
+      setSuccessMessage(wasEditing ? "Changes saved." : "Reminder saved.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to save reminder.");
     }
@@ -243,6 +259,7 @@ function App() {
 
   async function removeReminder(id: string) {
     setErrorMessage(null);
+    setSuccessMessage(null);
 
     try {
       await deleteReminder(id);
@@ -317,6 +334,7 @@ function App() {
               preview={preview}
               editingId={editingId}
               errorMessage={errorMessage}
+              successMessage={successMessage}
               onDraftChange={setDraft}
               onSave={saveReminder}
               onEdit={editReminder}
@@ -425,6 +443,7 @@ function RemindersScreen({
   preview,
   editingId,
   errorMessage,
+  successMessage,
   onDraftChange,
   onSave,
   onEdit,
@@ -437,6 +456,7 @@ function RemindersScreen({
   preview: DisplayOccurrence[];
   editingId: string | null;
   errorMessage: string | null;
+  successMessage: string | null;
   onDraftChange: (next: DraftReminder) => void;
   onSave: () => void;
   onEdit: (reminder: Reminder) => void;
@@ -528,7 +548,17 @@ function RemindersScreen({
           </div>
         </div>
 
-        {errorMessage && <div className="error-message">{errorMessage}</div>}
+        {successMessage && (
+          <div className="success-message" role="status" aria-live="polite">
+            {successMessage}
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="error-message" role="alert">
+            {errorMessage}
+          </div>
+        )}
 
         <button className="primary-button" onClick={() => void onSave()}>
           {editingId ? "Save Changes" : "Save Reminder"}

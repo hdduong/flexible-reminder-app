@@ -448,15 +448,25 @@ select:focus {
   display: inline-flex;
 }
 
-.error-message {
-  background: #fff0e8;
+.error-message,
+.success-message {
   border: 1px solid #e2a083;
   border-radius: 14px;
-  color: var(--terracotta-dark);
   font-size: 0.82rem;
   font-weight: 800;
   line-height: 1.35;
   padding: 11px 12px;
+}
+
+.error-message {
+  background: #fff0e8;
+  color: var(--terracotta-dark);
+}
+
+.success-message {
+  background: #eef7e9;
+  border-color: #b9c9a8;
+  color: #4f6846;
 }
 
 .saved-row {

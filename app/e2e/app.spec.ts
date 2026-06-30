@@ -57,8 +57,19 @@ test("supports free-text reminder creation", async ({ page }, testInfo) => {
   await page.getByPlaceholder("Try bathroom").fill("Stretch legs");
   await page.getByRole("button", { name: "Save Reminder" }).click();
 
+  await expect(page.getByRole("status")).toHaveText("Reminder saved.");
   await expect(page.locator(".saved-list")).toContainText("Stretch legs");
   await expect(page.locator(".saved-list")).toContainText("every 1 hour 45 min");
+
+  const saveScreenshot = await page.screenshot({
+    fullPage: true,
+    path: testInfo.outputPath("save-confirmation-mobile.png"),
+  });
+
+  await testInfo.attach("save-confirmation-mobile", {
+    body: saveScreenshot,
+    contentType: "image/png",
+  });
 
   await page.locator(".saved-row-main", { hasText: "Stretch legs" }).click();
   await expect(page.getByRole("heading", { name: "Edit Reminder" })).toBeVisible();
@@ -69,6 +80,7 @@ test("supports free-text reminder creation", async ({ page }, testInfo) => {
   await page.getByLabel("Repeat minutes").selectOption("20");
   await page.getByRole("button", { name: "Save Changes" }).click();
 
+  await expect(page.getByRole("status")).toHaveText("Changes saved.");
   await expect(page.locator(".saved-list")).toContainText("every 20 min");
 });
 
