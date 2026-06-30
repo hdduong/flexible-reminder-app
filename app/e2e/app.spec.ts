@@ -28,7 +28,7 @@ test("renders the Today screen and captures a mobile screenshot", async ({
   });
 });
 
-test("supports free-text reminder creation", async ({ page }) => {
+test("supports free-text reminder creation", async ({ page }, testInfo) => {
   await page.getByRole("button", { name: "Reminders" }).click();
 
   await expect(page.getByRole("heading", { name: "New Reminder" })).toBeVisible();
@@ -36,11 +36,38 @@ test("supports free-text reminder creation", async ({ page }) => {
   await expect(page.getByText("Try bathroom")).toBeVisible();
   await expect(page.getByText("Drink water")).toBeVisible();
   await expect(page.getByText("Study English")).toBeVisible();
+  await expect(page.getByLabel("Repeat hours")).toHaveValue("2");
+  await expect(page.getByLabel("Repeat minutes")).toHaveValue("0");
+
+  await page.getByLabel("Repeat hours").selectOption("1");
+  await page.getByLabel("Repeat minutes").selectOption("45");
+
+  const screenshot = await page.screenshot({
+    fullPage: true,
+    path: testInfo.outputPath("repeat-dropdowns-mobile.png"),
+  });
+
+  await testInfo.attach("repeat-dropdowns-mobile", {
+    body: screenshot,
+    contentType: "image/png",
+  });
 
   await page.getByPlaceholder("Try bathroom").fill("Stretch legs");
   await page.getByRole("button", { name: "Save Reminder" }).click();
 
   await expect(page.locator(".saved-list")).toContainText("Stretch legs");
+  await expect(page.locator(".saved-list")).toContainText("every 1 hour 45 min");
+
+  await page.getByRole("button", { name: /Stretch legs/ }).click();
+  await expect(page.getByRole("heading", { name: "Edit Reminder" })).toBeVisible();
+  await expect(page.getByLabel("Repeat hours")).toHaveValue("1");
+  await expect(page.getByLabel("Repeat minutes")).toHaveValue("45");
+
+  await page.getByLabel("Repeat hours").selectOption("0");
+  await page.getByLabel("Repeat minutes").selectOption("20");
+  await page.getByRole("button", { name: "Save Changes" }).click();
+
+  await expect(page.locator(".saved-list")).toContainText("every 20 min");
 });
 
 test("shows privacy and snooze settings", async ({ page }) => {
