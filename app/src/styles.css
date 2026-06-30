@@ -471,6 +471,11 @@ select:focus {
   position: relative;
 }
 
+.swipe-row.remove-open .saved-row {
+  border-right-color: transparent;
+  border-radius: 18px 0 0 18px;
+}
+
 .swipe-row .saved-row {
   position: relative;
   touch-action: pan-y;

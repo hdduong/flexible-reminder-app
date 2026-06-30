@@ -720,7 +720,10 @@ function SwipeableReminderRow({
       </button>
       <div
         className="saved-row"
-        style={{ transform: `translateX(${currentOffset}px)` }}
+        style={{
+          transform: `translateX(${currentOffset}px)`,
+          transition: dragStartX.current !== null ? "none" : undefined,
+        }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={finishSwipe}
