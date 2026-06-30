@@ -12,7 +12,9 @@ import {
   appendReminderEvent,
   getSettings,
   listRemindersFromStorage,
+  readJson,
   saveReminders,
+  writeJson,
 } from "./storage";
 import {
   cancelOccurrenceNotification,
@@ -31,6 +33,39 @@ import {
 } from "./schedule";
 
 const MAX_REMINDER_TEXT_LENGTH = 120;
+
+const STARTER_CLEANUP_KEY = "migration:starterCleanup:v1";
+const LEGACY_STARTER_TEXTS = new Set([
+  "Try bathroom",
+  "Drink water",
+  "Study English",
+]);
+
+// One-time migration: earlier builds auto-seeded three sample reminders. Remove
+// those still-untouched samples from existing installs (createdAt === updatedAt
+// means the user never edited them), then record that it ran so a user who
+// later creates a reminder with the same text is never affected.
+export async function removeLegacyStarterReminders(): Promise<void> {
+  const alreadyCleaned = await readJson<boolean>(STARTER_CLEANUP_KEY, false);
+  if (alreadyCleaned) {
+    return;
+  }
+
+  const reminders = await listRemindersFromStorage();
+  const remaining = reminders.filter(
+    (reminder) =>
+      !(
+        LEGACY_STARTER_TEXTS.has(reminder.text) &&
+        reminder.createdAt === reminder.updatedAt
+      ),
+  );
+
+  if (remaining.length !== reminders.length) {
+    await saveReminders(remaining);
+  }
+
+  await writeJson(STARTER_CLEANUP_KEY, true);
+}
 
 export async function listReminders(): Promise<Reminder[]> {
   return (await listRemindersFromStorage()).filter(

@@ -35,9 +35,7 @@ test("supports free-text reminder creation", async ({ page }, testInfo) => {
 
   await expect(page.getByRole("heading", { name: "New Reminder" })).toBeVisible();
   await expect(page.getByPlaceholder("Try bathroom")).toBeVisible();
-  await expect(page.getByText("Try bathroom")).toBeVisible();
-  await expect(page.getByText("Drink water")).toBeVisible();
-  await expect(page.getByText("Study English")).toBeVisible();
+  await expect(page.locator(".saved-list")).toContainText("No reminders yet");
   await expect(page.getByLabel("Repeat hours")).toHaveValue("2");
   await expect(page.getByLabel("Repeat minutes")).toHaveValue("0");
 
@@ -89,13 +87,17 @@ test("removes saved reminders with a swipe action", async ({
 }, testInfo) => {
   await page.getByRole("button", { name: "Reminders" }).click();
 
-  const savedList = page.locator(".saved-list");
-  const starterRow = savedList.locator(".swipe-row", {
-    hasText: "Try bathroom",
-  });
-  await expect(starterRow).toBeVisible();
+  await page.getByPlaceholder("Try bathroom").fill("Walk dog");
+  await page.getByRole("button", { name: "Save Reminder" }).click();
+  await expect(page.getByRole("status")).toHaveText("Reminder saved.");
 
-  await swipeLeft(starterRow);
+  const savedList = page.locator(".saved-list");
+  const savedRow = savedList.locator(".swipe-row", {
+    hasText: "Walk dog",
+  });
+  await expect(savedRow).toBeVisible();
+
+  await swipeLeft(savedRow);
 
   const screenshot = await page.screenshot({
     fullPage: true,
@@ -107,10 +109,10 @@ test("removes saved reminders with a swipe action", async ({
     contentType: "image/png",
   });
 
-  await page.getByRole("button", { name: "Remove Try bathroom" }).click();
+  await page.getByRole("button", { name: "Remove Walk dog" }).click();
 
-  await expect(savedList).not.toContainText("Try bathroom");
-  await expect(savedList).toContainText("Drink water");
+  await expect(savedList).not.toContainText("Walk dog");
+  await expect(savedList).toContainText("No reminders yet");
 });
 
 test("shows privacy and snooze settings", async ({ page }) => {
