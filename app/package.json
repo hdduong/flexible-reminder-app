@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
+    "icons:generate": "node scripts/generate-app-icons.mjs",
+    "icons:install-ios": "node scripts/install-ios-app-icon.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest run",
     "test:e2e": "playwright test",

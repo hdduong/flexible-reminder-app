@@ -155,6 +155,10 @@ jobs:
             npx cap add ios
           fi
 
+      - name: Install iOS app icon
+        working-directory: app
+        run: npm run icons:install-ios
+
       - name: Check signing and TestFlight inputs
         id: signing
         env:
