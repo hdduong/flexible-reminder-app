@@ -549,7 +549,7 @@ function RemindersScreen({
         </div>
 
         {successMessage && (
-          <div className="success-message" role="status" aria-live="polite">
+          <div className="success-message" role="status">
             {successMessage}
           </div>
         )}
