@@ -17,6 +17,10 @@ const APP_NOTIFICATION_MARKER = "flexible-reminder";
 const REMINDER_ACTION_TYPE_ID = "reminder-actions";
 const NOTIFICATION_LOOKAHEAD_DAYS = 14;
 const MAX_NOTIFICATIONS_PER_REMINDER = 32;
+// iOS rejects a whole schedule batch if any trigger date reaches native code
+// at or before "now"; a small lead avoids bridge-delay failures.
+const MIN_NOTIFICATION_LEAD_MS = 5_000;
+const DEFAULT_NOTIFICATION_SOUND = "default";
 
 type PermissionResponse = Record<string, string | undefined>;
 
@@ -24,6 +28,7 @@ interface LocalNotificationDescriptor {
   id: number;
   title: string;
   body: string;
+  sound?: string;
   schedule?: {
     at: Date;
     allowWhileIdle?: boolean;
@@ -251,9 +256,12 @@ export async function scheduleOccurrenceNotifications(
   await ensureActionTypesRegistered(plugin);
 
   const appSettings = settings ?? (await getSettings());
-  const now = Date.now();
+  const earliestScheduledAt = Date.now() + MIN_NOTIFICATION_LEAD_MS;
   const notifications = occurrences
-    .filter((occurrence) => new Date(occurrence.scheduledFor).getTime() >= now)
+    .filter(
+      (occurrence) =>
+        new Date(occurrence.scheduledFor).getTime() >= earliestScheduledAt,
+    )
     .map((occurrence) =>
       toLocalNotification(reminder, occurrence, appSettings),
   );
@@ -332,6 +340,7 @@ function toLocalNotification(
     id: notificationIdForOccurrence(occurrence.id),
     title: text.title,
     body: text.body,
+    sound: DEFAULT_NOTIFICATION_SOUND,
     schedule: {
       at: new Date(occurrence.scheduledFor),
       allowWhileIdle: true,
