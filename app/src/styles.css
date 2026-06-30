@@ -429,6 +429,18 @@ select:focus {
   color: var(--white);
 }
 
+.repeat-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.repeat-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+}
+
 .preview-row span {
   align-items: center;
   background: var(--white);

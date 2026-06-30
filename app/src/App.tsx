@@ -53,6 +53,9 @@ type DisplayOccurrence = {
 const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const workweek: Weekday[] = [1, 2, 3, 4, 5];
 const appVersion = import.meta.env.VITE_APP_VERSION;
+const repeatHourOptions = Array.from({ length: 25 }, (_, hour) => hour);
+const repeatMinuteOptions = Array.from({ length: 60 }, (_, minute) => minute);
+const maxRepeatIntervalMinutes = 24 * 60;
 
 const starterInputs: CreateReminderInput[] = [
   {
@@ -445,17 +448,7 @@ function RemindersScreen({
         </div>
 
         {draft.repeatMode === "interval" ? (
-          <label>
-            <span>Repeat</span>
-            <select value={draft.intervalMinutes} onChange={(event) => onDraftChange({ ...draft, intervalMinutes: Number(event.target.value) })}>
-              <option value={15}>Every 15 minutes</option>
-              <option value={30}>Every 30 minutes</option>
-              <option value={60}>Every 1 hour</option>
-              <option value={120}>Every 2 hours</option>
-              <option value={180}>Every 3 hours</option>
-              <option value={240}>Every 4 hours</option>
-            </select>
-          </label>
+          <RepeatIntervalFields draft={draft} onDraftChange={onDraftChange} />
         ) : (
           <label>
             <span>Exact times</span>
@@ -576,6 +569,70 @@ function SettingsRow({ label, value, children }: { label: string; value: string;
   );
 }
 
+function RepeatIntervalFields({
+  draft,
+  onDraftChange,
+}: {
+  draft: DraftReminder;
+  onDraftChange: (next: DraftReminder) => void;
+}) {
+  const repeatInterval = getRepeatIntervalParts(draft.intervalMinutes);
+  const minuteOptions = getRepeatMinuteOptions(repeatInterval.hours);
+
+  return (
+    <div className="repeat-field">
+      <span className="field-label">Repeat every</span>
+      <div className="repeat-grid">
+        <label>
+          <span>Hours</span>
+          <select
+            aria-label="Repeat hours"
+            value={repeatInterval.hours}
+            onChange={(event) =>
+              onDraftChange(
+                updateDraftRepeatInterval(
+                  draft,
+                  "hours",
+                  Number(event.target.value),
+                ),
+              )
+            }
+          >
+            {repeatHourOptions.map((hour) => (
+              <option key={hour} value={hour}>
+                {hour} {hour === 1 ? "hour" : "hours"}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>Minutes</span>
+          <select
+            aria-label="Repeat minutes"
+            value={repeatInterval.minutes}
+            onChange={(event) =>
+              onDraftChange(
+                updateDraftRepeatInterval(
+                  draft,
+                  "minutes",
+                  Number(event.target.value),
+                ),
+              )
+            }
+          >
+            {minuteOptions.map((minute) => (
+              <option key={minute} value={minute}>
+                {minute} {minute === 1 ? "minute" : "minutes"}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    </div>
+  );
+}
+
 function OccurrenceRow({ occurrence }: { occurrence: DisplayOccurrence }) {
   return (
     <div className="occurrence-row">
@@ -630,7 +687,10 @@ function toSchedule(draft: DraftReminder): ReminderSchedule {
     startTime: draft.startTime,
     endTime: draft.endTime,
     mode: draft.repeatMode,
-    intervalMinutes: draft.repeatMode === "interval" ? draft.intervalMinutes : null,
+    intervalMinutes:
+      draft.repeatMode === "interval"
+        ? clampRepeatIntervalMinutes(draft.intervalMinutes)
+        : null,
     exactTimes: draft.repeatMode === "exact_times" ? draft.exactTimes.filter(Boolean) : [],
     timezone: getDeviceTimezone(),
   };
@@ -656,7 +716,9 @@ function toDraft(reminder: Reminder, defaultSnoozeMinutes: number): DraftReminde
     startTime: reminder.schedule.startTime,
     endTime: reminder.schedule.endTime,
     repeatMode: reminder.schedule.mode,
-    intervalMinutes: reminder.schedule.intervalMinutes ?? 120,
+    intervalMinutes: clampRepeatIntervalMinutes(
+      reminder.schedule.intervalMinutes ?? 120,
+    ),
     exactTimes: reminder.schedule.exactTimes.length ? reminder.schedule.exactTimes : ["09:00"],
     snoozeMinutes: reminder.snoozeMinutesOverride ?? defaultSnoozeMinutes,
   };
@@ -684,9 +746,66 @@ function summarizeReminder(reminder: Reminder) {
 }
 
 function formatInterval(minutes: number) {
-  if (minutes < 60) return `${minutes} min`;
-  const hours = minutes / 60;
-  return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+  const normalized = clampRepeatIntervalMinutes(minutes);
+  const hours = Math.floor(normalized / 60);
+  const remainingMinutes = normalized % 60;
+
+  if (hours === 0) return `${remainingMinutes} min`;
+
+  const hourText = `${hours} ${hours === 1 ? "hour" : "hours"}`;
+  if (remainingMinutes === 0) return hourText;
+
+  return `${hourText} ${remainingMinutes} min`;
+}
+
+function getRepeatIntervalParts(intervalMinutes: number) {
+  const normalized = clampRepeatIntervalMinutes(intervalMinutes);
+  return {
+    hours: Math.floor(normalized / 60),
+    minutes: normalized % 60,
+  };
+}
+
+function getRepeatMinuteOptions(hours: number) {
+  if (hours === 24) {
+    return [0];
+  }
+
+  if (hours === 0) {
+    return repeatMinuteOptions.slice(1);
+  }
+
+  return repeatMinuteOptions;
+}
+
+function updateDraftRepeatInterval(
+  draft: DraftReminder,
+  unit: "hours" | "minutes",
+  value: number,
+): DraftReminder {
+  const current = getRepeatIntervalParts(draft.intervalMinutes);
+  const next = {
+    ...current,
+    [unit]: value,
+  };
+
+  return {
+    ...draft,
+    intervalMinutes: clampRepeatIntervalMinutes(
+      next.hours * 60 + next.minutes,
+    ),
+  };
+}
+
+function clampRepeatIntervalMinutes(minutes: number) {
+  if (!Number.isFinite(minutes)) {
+    return 1;
+  }
+
+  return Math.min(
+    maxRepeatIntervalMinutes,
+    Math.max(1, Math.trunc(minutes)),
+  );
 }
 
 function formatDisplayTime(time: string) {
