@@ -5,6 +5,7 @@ import type {
   NotificationPermissionStatus,
 } from "../types";
 import { Capacitor } from "@capacitor/core";
+import { LocalNotifications } from "@capacitor/local-notifications";
 import { getSettings, listRemindersFromStorage, updateSettings } from "./storage";
 import {
   addDays,
@@ -47,10 +48,6 @@ interface LocalNotificationsPlugin {
   getPending?: () => Promise<{
     notifications: Array<LocalNotificationDescriptor>;
   }>;
-}
-
-interface LocalNotificationsModule {
-  LocalNotifications?: LocalNotificationsPlugin;
 }
 
 let localNotificationsPromise: Promise<LocalNotificationsPlugin | null> | null =
@@ -413,15 +410,9 @@ async function loadLocalNotificationsPlugin(): Promise<LocalNotificationsPlugin 
     return null;
   }
 
-  try {
-    const module = (await import(
-      "@capacitor/local-notifications"
-    )) as unknown as LocalNotificationsModule;
-
-    return module.LocalNotifications ?? null;
-  } catch {
-    return null;
-  }
+  // Statically imported (see storage.ts) to avoid a dynamic import() that can
+  // hang in the iOS WKWebView and freeze the app on first launch.
+  return (LocalNotifications as unknown as LocalNotificationsPlugin) ?? null;
 }
 
 function normalizePermissionStatus(
