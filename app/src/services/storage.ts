@@ -105,7 +105,7 @@ export async function removeStoredValue(key: string): Promise<void> {
     try {
       await withNativeTimeout(
         preferences.remove({ key }),
-        `Preferences.remove(${key})`,
+        `Preferences.remove(${formatStorageKey(key)})`,
       );
       return;
     } catch {
@@ -129,7 +129,7 @@ async function readRawValue(key: string): Promise<string | null> {
       return (
         await withNativeTimeout(
           preferences.get({ key }),
-          `Preferences.get(${key})`,
+          `Preferences.get(${formatStorageKey(key)})`,
         )
       ).value;
     } catch {
@@ -151,7 +151,7 @@ async function writeRawValue(key: string, value: string): Promise<void> {
     try {
       await withNativeTimeout(
         preferences.set({ key, value }),
-        `Preferences.set(${key})`,
+        `Preferences.set(${formatStorageKey(key)})`,
       );
       return;
     } catch {
@@ -203,4 +203,8 @@ function hasLocalStorage(): boolean {
   } catch {
     return false;
   }
+}
+
+function formatStorageKey(key: string): string {
+  return JSON.stringify(key);
 }
