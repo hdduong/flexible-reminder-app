@@ -74,7 +74,7 @@ export async function requestNotificationPermission(): Promise<
     const status = normalizePermissionStatus(response);
     permissionStatus = status === "granted" ? "granted" : "denied";
   } catch {
-    disableLocalNotificationsPlugin();
+    resetLocalNotificationsPlugin();
   }
 
   await updateSettings({ notificationPermissionStatus: permissionStatus });
@@ -98,12 +98,39 @@ export async function getNotificationPermissionStatus(): Promise<
       ),
     );
   } catch {
-    disableLocalNotificationsPlugin();
+    resetLocalNotificationsPlugin();
     return "denied";
   }
 }
 
-export async function rescheduleAllNotifications(): Promise<void> {
+let rescheduleInFlight: Promise<void> | null = null;
+let rescheduleQueued = false;
+
+export function rescheduleAllNotifications(): Promise<void> {
+  // A reschedule cancels the whole app queue and rebuilds it, so two running
+  // at once can clobber each other (one cancels while the other schedules).
+  // Serialize: run one at a time, coalescing extra calls into a single
+  // trailing re-run so the final state reflects the latest data.
+  if (rescheduleInFlight) {
+    rescheduleQueued = true;
+    return rescheduleInFlight;
+  }
+
+  rescheduleInFlight = (async () => {
+    try {
+      do {
+        rescheduleQueued = false;
+        await runRescheduleAllNotifications();
+      } while (rescheduleQueued);
+    } finally {
+      rescheduleInFlight = null;
+    }
+  })();
+
+  return rescheduleInFlight;
+}
+
+async function runRescheduleAllNotifications(): Promise<void> {
   const reminders = await listRemindersFromStorage();
 
   await cancelAllAppNotifications();
@@ -238,7 +265,7 @@ export async function scheduleOccurrenceNotifications(
         "LocalNotifications.schedule",
       );
     } catch {
-      disableLocalNotificationsPlugin();
+      resetLocalNotificationsPlugin();
     }
   }
 }
@@ -360,7 +387,7 @@ async function getLocalNotificationsPlugin(): Promise<LocalNotificationsPlugin |
       "LocalNotifications plugin load",
     );
   } catch {
-    disableLocalNotificationsPlugin();
+    resetLocalNotificationsPlugin();
     return null;
   }
 }
@@ -378,7 +405,7 @@ async function getPendingNotifications(
       "LocalNotifications.getPending",
     );
   } catch {
-    disableLocalNotificationsPlugin();
+    resetLocalNotificationsPlugin();
     return null;
   }
 }
@@ -397,12 +424,17 @@ async function cancelNotifications(
       "LocalNotifications.cancel",
     );
   } catch {
-    disableLocalNotificationsPlugin();
+    resetLocalNotificationsPlugin();
   }
 }
 
-function disableLocalNotificationsPlugin(): void {
-  localNotificationsPromise = Promise.resolve(null);
+function resetLocalNotificationsPlugin(): void {
+  // Drop the cached plugin handle and action-type registration so the next
+  // call re-resolves them. A transient native failure/timeout must not disable
+  // notifications for the rest of the session — the foreground reschedule and
+  // later actions can retry once the bridge is responsive again.
+  localNotificationsPromise = null;
+  actionTypesRegistered = false;
 }
 
 async function loadLocalNotificationsPlugin(): Promise<LocalNotificationsPlugin | null> {
