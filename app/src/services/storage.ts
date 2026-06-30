@@ -188,7 +188,7 @@ async function loadPreferencesPlugin(): Promise<PreferencesPlugin | null> {
   // Statically imported so the native bridge is available immediately. A
   // dynamic import() here can hang in the iOS WKWebView when the lazy chunk
   // fails to load, which froze the app on the loading screen.
-  return (Preferences as unknown as PreferencesPlugin) ?? null;
+  return Preferences as unknown as PreferencesPlugin;
 }
 
 function hasLocalStorage(): boolean {

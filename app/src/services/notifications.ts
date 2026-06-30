@@ -412,7 +412,7 @@ async function loadLocalNotificationsPlugin(): Promise<LocalNotificationsPlugin 
 
   // Statically imported (see storage.ts) to avoid a dynamic import() that can
   // hang in the iOS WKWebView and freeze the app on first launch.
-  return (LocalNotifications as unknown as LocalNotificationsPlugin) ?? null;
+  return LocalNotifications as unknown as LocalNotificationsPlugin;
 }
 
 function normalizePermissionStatus(
