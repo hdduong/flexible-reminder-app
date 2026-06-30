@@ -11,16 +11,10 @@ on:
         description: Optional iOS build number. Leave blank to use GitHub run number and run attempt.
         required: false
         type: string
-  pull_request:
-    paths:
-      - 'app/**'
-      - '.github/workflows/ios-testflight.yml'
-  push:
-    branches:
-      - main
-    paths:
-      - 'app/**'
-      - '.github/workflows/ios-testflight.yml'
+
+# TestFlight builds are intentionally manual only: trigger this from the
+# Actions tab ("Run workflow") on main. Pushes and PRs run the CI workflow
+# (.github/workflows/ci.yml) instead, which only builds and runs the tests.
 
 permissions:
   contents: read
