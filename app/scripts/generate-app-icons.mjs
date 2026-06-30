@@ -76,15 +76,6 @@ async function renderIcon(page, outputPath, pixels) {
   await page.locator(".icon").screenshot({ path: outputPath });
 }
 
-const browser = await chromium.launch();
-const page = await browser.newPage({ deviceScaleFactor: 1 });
-
-await rm(iosIconSet, { force: true, recursive: true });
-
-for (const [relativePath, pixels] of webIcons) {
-  await renderIcon(page, resolve(appRoot, relativePath), pixels);
-}
-
 const contents = {
   images: [],
   info: {
@@ -93,18 +84,30 @@ const contents = {
   },
 };
 
-for (const icon of iosIcons) {
-  const filename = iconFilename(icon);
-  await renderIcon(page, resolve(iosIconSet, filename), icon.pixels);
-  contents.images.push({
-    filename,
-    idiom: icon.idiom,
-    scale: icon.scale,
-    size: icon.size,
-  });
-}
+const browser = await chromium.launch();
 
-await browser.close();
+try {
+  const page = await browser.newPage({ deviceScaleFactor: 1 });
+
+  await rm(iosIconSet, { force: true, recursive: true });
+
+  for (const [relativePath, pixels] of webIcons) {
+    await renderIcon(page, resolve(appRoot, relativePath), pixels);
+  }
+
+  for (const icon of iosIcons) {
+    const filename = iconFilename(icon);
+    await renderIcon(page, resolve(iosIconSet, filename), icon.pixels);
+    contents.images.push({
+      filename,
+      idiom: icon.idiom,
+      scale: icon.scale,
+      size: icon.size,
+    });
+  }
+} finally {
+  await browser.close();
+}
 
 contents.images.sort((left, right) => {
   const idiomOrder = left.idiom.localeCompare(right.idiom);
