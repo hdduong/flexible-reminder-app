@@ -66,6 +66,7 @@ const repeatMinuteOptions = Array.from({ length: 60 }, (_, minute) => minute);
 const maxRepeatIntervalMinutes = 24 * 60;
 const swipeRevealPixels = 96;
 const swipeOpenThresholdPixels = 44;
+const requiredReminderTextMessage = "Reminder text is required.";
 
 const newReminderTemplate: DraftReminder = {
   id: null,
@@ -169,10 +170,18 @@ function App() {
     }
   }, [draft]);
 
+  function updateDraft(next: DraftReminder) {
+    setDraft(next);
+    if (errorMessage === requiredReminderTextMessage && next.text.trim()) {
+      setErrorMessage(null);
+    }
+  }
+
   function openNewReminder() {
     setEditingId(null);
     setDraft({ ...newReminderTemplate, snoozeMinutes: settings.defaultSnoozeMinutes });
     setSuccessMessage(null);
+    setErrorMessage(null);
     setTab("reminders");
   }
 
@@ -180,6 +189,7 @@ function App() {
     setEditingId(reminder.id);
     setDraft(toDraft(reminder, settings.defaultSnoozeMinutes));
     setSuccessMessage(null);
+    setErrorMessage(null);
     setTab("reminders");
   }
 
@@ -188,7 +198,8 @@ function App() {
     setSuccessMessage(null);
 
     if (!draft.text.trim()) {
-      setErrorMessage("Reminder text is required.");
+      setErrorMessage(requiredReminderTextMessage);
+      setTab("reminders");
       return;
     }
 
@@ -211,16 +222,49 @@ function App() {
   }
 
   async function toggleReminder(id: string, enabled: boolean) {
-    // Optimistic: flip the switch instantly, then persist. Notification work
-    // happens in the background (see reminders service), so this never blocks.
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    let previousReminder: Reminder | null = null;
     setReminders((current) =>
-      current.map((reminder) => (reminder.id === id ? { ...reminder, enabled } : reminder)),
+      current.map((reminder) => {
+        if (reminder.id !== id) {
+          return reminder;
+        }
+
+        previousReminder = reminder;
+        return { ...reminder, enabled };
+      }),
     );
 
     try {
-      await setReminderEnabled(id, enabled);
-    } catch {
-      await refreshReminders();
+      const saved = await setReminderEnabled(id, enabled);
+      setReminders((current) =>
+        current.map((reminder) => {
+          if (reminder.id !== id || reminder.enabled !== enabled) {
+            return reminder;
+          }
+
+          return saved;
+        }),
+      );
+    } catch (error) {
+      setReminders((current) =>
+        current.map((reminder) => {
+          if (
+            reminder.id !== id ||
+            reminder.enabled !== enabled ||
+            !previousReminder
+          ) {
+            return reminder;
+          }
+
+          return { ...reminder, enabled: previousReminder.enabled };
+        }),
+      );
+      setErrorMessage(
+        error instanceof Error ? error.message : "Unable to update reminder.",
+      );
     }
   }
 
@@ -228,12 +272,11 @@ function App() {
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    // Capture edit state so a failed delete can restore the editor + draft.
+    const previousReminders = reminders;
     const wasEditingRemoved = editingId === id;
     const previousEditingId = editingId;
     const previousDraft = draft;
 
-    // Optimistic: remove the row immediately; restore it only if delete fails.
     setReminders((current) => current.filter((reminder) => reminder.id !== id));
 
     if (wasEditingRemoved) {
@@ -246,11 +289,12 @@ function App() {
 
     try {
       await deleteReminder(id);
+      setSuccessMessage("Reminder removed.");
     } catch (error) {
+      setReminders(previousReminders);
       setErrorMessage(
         error instanceof Error ? error.message : "Unable to remove reminder.",
       );
-      await refreshReminders();
       if (wasEditingRemoved) {
         setEditingId(previousEditingId);
         setDraft(previousDraft);
@@ -292,15 +336,7 @@ function App() {
 
   return (
     <main className="app-shell">
-      <section className="phone">
-        {(errorMessage || successMessage) && (
-          <div
-            className={errorMessage ? "app-toast app-toast--error" : "app-toast app-toast--success"}
-            role={errorMessage ? "alert" : "status"}
-          >
-            {errorMessage ?? successMessage}
-          </div>
-        )}
+      <section className={errorMessage || successMessage ? "phone phone-with-toast" : "phone"}>
         <div className="phone-content">
           {tab === "today" && (
             <TodayScreen
@@ -319,8 +355,7 @@ function App() {
               preview={preview}
               editingId={editingId}
               errorMessage={errorMessage}
-              successMessage={successMessage}
-              onDraftChange={setDraft}
+              onDraftChange={updateDraft}
               onSave={saveReminder}
               onEdit={editReminder}
               onToggle={toggleReminder}
@@ -333,6 +368,18 @@ function App() {
             <SettingsScreen settings={settings} onChange={saveSettings} reminderCount={reminders.length} />
           )}
         </div>
+        {(errorMessage || successMessage) && (
+          <div
+            className={
+              errorMessage
+                ? "app-toast app-toast--error"
+                : "app-toast app-toast--success"
+            }
+            role={errorMessage ? "alert" : "status"}
+          >
+            {errorMessage ?? successMessage}
+          </div>
+        )}
         <TabBar active={tab} onChange={setTab} onAdd={openNewReminder} />
       </section>
     </main>
@@ -416,7 +463,6 @@ function RemindersScreen({
   preview,
   editingId,
   errorMessage,
-  successMessage,
   onDraftChange,
   onSave,
   onEdit,
@@ -429,7 +475,6 @@ function RemindersScreen({
   preview: DisplayOccurrence[];
   editingId: string | null;
   errorMessage: string | null;
-  successMessage: string | null;
   onDraftChange: (next: DraftReminder) => void;
   onSave: () => void;
   onEdit: (reminder: Reminder) => void;
@@ -456,7 +501,7 @@ function RemindersScreen({
             value={draft.text}
             maxLength={120}
             placeholder="Try bathroom"
-            aria-invalid={errorMessage === "Reminder text is required." || undefined}
+            aria-invalid={errorMessage === requiredReminderTextMessage || undefined}
             onChange={(event) => onDraftChange({ ...draft, text: event.target.value })}
           />
         </label>

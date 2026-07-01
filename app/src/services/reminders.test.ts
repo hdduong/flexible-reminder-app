@@ -98,7 +98,7 @@ describe("reminders", () => {
     await expect(listReminders()).resolves.toHaveLength(1);
   });
 
-  it("does not block reminder updates on notification scheduling", async () => {
+  it("does not block reminder updates on notification reconciliation", async () => {
     const created = await createReminder(reminderInput);
 
     // reconcileReminderNotifications is mocked to never resolve; updateReminder
@@ -111,7 +111,7 @@ describe("reminders", () => {
     });
   });
 
-  it("does not block reminder deletion on notification cancellation", async () => {
+  it("does not block reminder deletion on notification reconciliation", async () => {
     const created = await createReminder(reminderInput);
 
     // reconcileReminderNotifications is mocked to never resolve; deleteReminder

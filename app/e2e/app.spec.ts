@@ -76,7 +76,22 @@ test("supports free-text reminder creation", async ({ page }, testInfo) => {
   });
 
   await page.emulateMedia({ colorScheme: "light" });
+  await page.getByRole("button", { name: "Save Reminder" }).click();
+  await expect(page.getByRole("alert")).toHaveText("Reminder text is required.");
+  await expect(page.getByPlaceholder("Try bathroom")).toHaveAttribute("aria-invalid", "true");
+
+  const validationScreenshot = await page.screenshot({
+    fullPage: true,
+    path: testInfo.outputPath("required-text-toast-mobile.png"),
+  });
+
+  await testInfo.attach("required-text-toast-mobile", {
+    body: validationScreenshot,
+    contentType: "image/png",
+  });
+
   await page.getByPlaceholder("Try bathroom").fill("Stretch legs");
+  await expect(page.getByRole("alert")).toHaveCount(0);
   await page.getByRole("button", { name: "Save Reminder" }).click();
 
   await expect(page.getByRole("status")).toHaveText("Reminder saved.");
@@ -135,6 +150,7 @@ test("removes saved reminders with a swipe action", async ({
 
   await page.getByRole("button", { name: "Remove Walk dog" }).click();
 
+  await expect(page.getByRole("status")).toHaveText("Reminder removed.");
   await expect(savedList).not.toContainText("Walk dog");
   await expect(savedList).toContainText("No reminders yet");
 });

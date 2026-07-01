@@ -21,6 +21,9 @@ const MAX_NOTIFICATIONS_PER_REMINDER = 32;
 // at or before "now"; a small lead avoids bridge-delay failures.
 const MIN_NOTIFICATION_LEAD_MS = 5_000;
 const DEFAULT_NOTIFICATION_SOUND = "default";
+const NOTIFICATION_PERMISSION_TIMEOUT_MS = 60_000;
+const NOTIFICATION_NATIVE_CALL_TIMEOUT_MS = 10_000;
+const NOTIFICATION_PLUGIN_LOAD_TIMEOUT_MS = 5_000;
 
 type PermissionResponse = Record<string, string | undefined>;
 
@@ -29,6 +32,7 @@ interface LocalNotificationDescriptor {
   title: string;
   body: string;
   sound?: string;
+  silent?: boolean;
   schedule?: {
     at: Date;
     allowWhileIdle?: boolean;
@@ -75,6 +79,7 @@ export async function requestNotificationPermission(): Promise<
     const response = await withNativeTimeout(
       plugin.requestPermissions(),
       "LocalNotifications.requestPermissions",
+      NOTIFICATION_PERMISSION_TIMEOUT_MS,
     );
     const status = normalizePermissionStatus(response);
     permissionStatus = status === "granted" ? "granted" : "denied";
@@ -100,6 +105,7 @@ export async function getNotificationPermissionStatus(): Promise<
       await withNativeTimeout(
         plugin.checkPermissions(),
         "LocalNotifications.checkPermissions",
+        NOTIFICATION_NATIVE_CALL_TIMEOUT_MS,
       ),
     );
   } catch {
@@ -171,6 +177,12 @@ export function rescheduleAllNotifications(): Promise<void> {
   });
 
   return pendingReschedule;
+}
+
+export function rescheduleAllNotificationsInBackground(): void {
+  void rescheduleAllNotifications().catch((error) => {
+    console.warn("[notifications] background reschedule failed", error);
+  });
 }
 
 async function runRescheduleAllNotifications(): Promise<void> {
@@ -309,6 +321,7 @@ export async function scheduleOccurrenceNotifications(
       await withNativeTimeout(
         plugin.schedule({ notifications }),
         "LocalNotifications.schedule",
+        NOTIFICATION_NATIVE_CALL_TIMEOUT_MS,
       );
     } catch {
       resetLocalNotificationsPlugin();
@@ -379,6 +392,7 @@ function toLocalNotification(
     title: text.title,
     body: text.body,
     sound: DEFAULT_NOTIFICATION_SOUND,
+    silent: false,
     schedule: {
       at: new Date(occurrence.scheduledFor),
       allowWhileIdle: true,
@@ -416,6 +430,7 @@ async function ensureActionTypesRegistered(
         ],
       }),
       "LocalNotifications.registerActionTypes",
+      NOTIFICATION_NATIVE_CALL_TIMEOUT_MS,
     );
     actionTypesRegistered = true;
   } catch {
@@ -432,6 +447,7 @@ async function getLocalNotificationsPlugin(): Promise<LocalNotificationsPlugin |
     return await withNativeTimeout(
       localNotificationsPromise,
       "LocalNotifications plugin load",
+      NOTIFICATION_PLUGIN_LOAD_TIMEOUT_MS,
     );
   } catch {
     resetLocalNotificationsPlugin();
@@ -450,6 +466,7 @@ async function getPendingNotifications(
     return await withNativeTimeout(
       plugin.getPending(),
       "LocalNotifications.getPending",
+      NOTIFICATION_NATIVE_CALL_TIMEOUT_MS,
     );
   } catch {
     resetLocalNotificationsPlugin();
@@ -469,6 +486,7 @@ async function cancelNotifications(
     await withNativeTimeout(
       plugin.cancel({ notifications }),
       "LocalNotifications.cancel",
+      NOTIFICATION_NATIVE_CALL_TIMEOUT_MS,
     );
   } catch {
     resetLocalNotificationsPlugin();
