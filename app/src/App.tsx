@@ -340,7 +340,7 @@ function TodayScreen({
           <h1>Today</h1>
           <p>{formatLongDate(new Date())}</p>
         </div>
-        <button className="icon-button" onClick={onAdd} aria-label="Add reminder">
+        <button type="button" className="icon-button" onClick={onAdd} aria-label="Add reminder">
           +
         </button>
       </header>
@@ -351,11 +351,11 @@ function TodayScreen({
         <p>{upNext?.summary ?? "Add a free-text reminder to start your day."}</p>
         {upNext && (
           <div className="action-row">
-            <button onClick={() => void onAction("done", upNext)}>Done</button>
-            <button className="secondary-dark" onClick={() => void onAction("later", upNext)}>
+            <button type="button" onClick={() => void onAction("done", upNext)}>Done</button>
+            <button type="button" className="secondary-dark" onClick={() => void onAction("later", upNext)}>
               Later {snoozeMinutes}m
             </button>
-            <button className="secondary-dark" onClick={() => void onAction("skip", upNext)}>
+            <button type="button" className="secondary-dark" onClick={() => void onAction("skip", upNext)}>
               Skip
             </button>
           </div>
@@ -410,7 +410,7 @@ function RemindersScreen({
           <h1>{editingId ? "Edit Reminder" : "New Reminder"}</h1>
           <p>Free text, weekdays, exact active hours.</p>
         </div>
-        <button className="icon-button" onClick={onNew} aria-label="New reminder">
+        <button type="button" className="icon-button" onClick={onNew} aria-label="New reminder">
           +
         </button>
       </header>
@@ -435,6 +435,7 @@ function RemindersScreen({
           <div className="chip-row">
             {[1, 2, 3, 4, 5, 6, 0].map((day) => (
               <button
+                type="button"
                 key={day}
                 className={draft.daysOfWeek.includes(day as Weekday) ? "chip selected" : "chip"}
                 onClick={() => onDraftChange({ ...draft, daysOfWeek: toggleDay(draft.daysOfWeek, day as Weekday) })}
@@ -457,10 +458,10 @@ function RemindersScreen({
         </div>
 
         <div className="segmented">
-          <button className={draft.repeatMode === "interval" ? "selected" : ""} onClick={() => onDraftChange({ ...draft, repeatMode: "interval" })}>
+          <button type="button" className={draft.repeatMode === "interval" ? "selected" : ""} onClick={() => onDraftChange({ ...draft, repeatMode: "interval" })}>
             Interval
           </button>
-          <button className={draft.repeatMode === "exact_times" ? "selected" : ""} onClick={() => onDraftChange({ ...draft, repeatMode: "exact_times" })}>
+          <button type="button" className={draft.repeatMode === "exact_times" ? "selected" : ""} onClick={() => onDraftChange({ ...draft, repeatMode: "exact_times" })}>
             Exact Times
           </button>
         </div>
@@ -499,7 +500,7 @@ function RemindersScreen({
           </div>
         )}
 
-        <button className="primary-button" onClick={() => void onSave()}>
+        <button type="button" className="primary-button" onClick={() => void onSave()}>
           {editingId ? "Save Changes" : "Save Reminder"}
         </button>
       </section>
@@ -683,6 +684,7 @@ function SwipeableReminderRow({
   return (
     <div className={isRemoveOpen ? "swipe-row remove-open" : "swipe-row"}>
       <button
+        type="button"
         className="remove-reminder-button"
         onClick={() => onDelete(reminder.id)}
         aria-label={`Remove ${reminder.text}`}
@@ -702,7 +704,7 @@ function SwipeableReminderRow({
         onPointerUp={finishSwipe}
         onPointerCancel={finishSwipe}
       >
-        <button className="saved-row-main" onClick={handleEdit}>
+        <button type="button" className="saved-row-main" onClick={handleEdit}>
           <div>
             <strong>{reminder.text}</strong>
             <span>{summarizeReminder(reminder)}</span>
@@ -803,16 +805,16 @@ function OccurrenceRow({ occurrence }: { occurrence: DisplayOccurrence }) {
 function TabBar({ active, onChange, onAdd }: { active: Tab; onChange: (tab: Tab) => void; onAdd: () => void }) {
   return (
     <nav className="tab-bar" aria-label="Primary">
-      <button className={active === "today" ? "active" : ""} onClick={() => onChange("today")}>
+      <button type="button" className={active === "today" ? "active" : ""} onClick={() => onChange("today")}>
         Today
       </button>
-      <button className={active === "reminders" ? "active" : ""} onClick={() => onChange("reminders")}>
+      <button type="button" className={active === "reminders" ? "active" : ""} onClick={() => onChange("reminders")}>
         Reminders
       </button>
-      <button className="add-tab" onClick={onAdd} aria-label="Add reminder">
+      <button type="button" className="add-tab" onClick={onAdd} aria-label="Add reminder">
         +
       </button>
-      <button className={active === "settings" ? "active" : ""} onClick={() => onChange("settings")}>
+      <button type="button" className={active === "settings" ? "active" : ""} onClick={() => onChange("settings")}>
         Settings
       </button>
     </nav>

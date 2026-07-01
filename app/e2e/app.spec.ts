@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
 });
 
-test("renders the Today screen and captures a mobile screenshot", async ({
+test("renders the Today screen and captures light/dark mobile screenshots", async ({
   page,
 }, testInfo) => {
   await expect(page.getByText("Flexible Reminder")).toBeVisible();
@@ -19,13 +19,25 @@ test("renders the Today screen and captures a mobile screenshot", async ({
   await expect(page.locator(".tab-bar")).toContainText("Reminders");
   await expect(page.getByText("Loading reminders...")).toHaveCount(0);
 
-  const screenshot = await page.screenshot({
+  await page.emulateMedia({ colorScheme: "light" });
+  const lightScreenshot = await page.screenshot({
     fullPage: true,
-    path: testInfo.outputPath("today-mobile.png"),
+    path: testInfo.outputPath("today-light-mobile.png"),
   });
 
-  await testInfo.attach("today-mobile", {
-    body: screenshot,
+  await testInfo.attach("today-light-mobile", {
+    body: lightScreenshot,
+    contentType: "image/png",
+  });
+
+  await page.emulateMedia({ colorScheme: "dark" });
+  const darkScreenshot = await page.screenshot({
+    fullPage: true,
+    path: testInfo.outputPath("today-dark-mobile.png"),
+  });
+
+  await testInfo.attach("today-dark-mobile", {
+    body: darkScreenshot,
     contentType: "image/png",
   });
 });
@@ -52,6 +64,18 @@ test("supports free-text reminder creation", async ({ page }, testInfo) => {
     contentType: "image/png",
   });
 
+  await page.emulateMedia({ colorScheme: "dark" });
+  const darkFormScreenshot = await page.screenshot({
+    fullPage: true,
+    path: testInfo.outputPath("repeat-dropdowns-dark-mobile.png"),
+  });
+
+  await testInfo.attach("repeat-dropdowns-dark-mobile", {
+    body: darkFormScreenshot,
+    contentType: "image/png",
+  });
+
+  await page.emulateMedia({ colorScheme: "light" });
   await page.getByPlaceholder("Try bathroom").fill("Stretch legs");
   await page.getByRole("button", { name: "Save Reminder" }).click();
 
