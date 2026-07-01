@@ -1,7 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings, Reminder, ReminderOccurrence } from "../types";
 import { createDefaultSettings } from "../types";
-import { scheduleOccurrenceNotifications } from "./notifications";
+import {
+  requestNotificationPermission,
+  rescheduleAllNotifications,
+  scheduleOccurrenceNotifications,
+} from "./notifications";
 
 const capacitorMocks = vi.hoisted(() => ({
   getPlatform: vi.fn(() => "ios"),
@@ -9,10 +13,18 @@ const capacitorMocks = vi.hoisted(() => ({
 
 const localNotificationMocks = vi.hoisted(() => ({
   checkPermissions: vi.fn(),
+  requestPermissions: vi.fn(),
   registerActionTypes: vi.fn(),
   schedule: vi.fn(),
   cancel: vi.fn(),
   getPending: vi.fn(),
+}));
+
+const storageMocks = vi.hoisted(() => ({
+  reminders: [] as Reminder[],
+  getSettings: vi.fn(),
+  listRemindersFromStorage: vi.fn(),
+  updateSettings: vi.fn(),
 }));
 
 vi.mock("@capacitor/core", () => ({
@@ -21,6 +33,12 @@ vi.mock("@capacitor/core", () => ({
 
 vi.mock("@capacitor/local-notifications", () => ({
   LocalNotifications: localNotificationMocks,
+}));
+
+vi.mock("./storage", () => ({
+  getSettings: storageMocks.getSettings,
+  listRemindersFromStorage: storageMocks.listRemindersFromStorage,
+  updateSettings: storageMocks.updateSettings,
 }));
 
 const reminder: Reminder = {
@@ -50,12 +68,30 @@ const settings: AppSettings = createDefaultSettings(
 describe("notifications", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    storageMocks.reminders = [];
+    storageMocks.getSettings.mockResolvedValue(settings);
+    storageMocks.listRemindersFromStorage.mockImplementation(
+      async () => storageMocks.reminders,
+    );
+    storageMocks.updateSettings.mockImplementation(async (input) => ({
+      ...settings,
+      ...input,
+    }));
     capacitorMocks.getPlatform.mockReturnValue("ios");
     localNotificationMocks.checkPermissions.mockResolvedValue({
       display: "granted",
     });
+    localNotificationMocks.requestPermissions.mockResolvedValue({
+      display: "granted",
+    });
     localNotificationMocks.registerActionTypes.mockResolvedValue(undefined);
     localNotificationMocks.schedule.mockResolvedValue({ notifications: [] });
+    localNotificationMocks.cancel.mockResolvedValue(undefined);
+    localNotificationMocks.getPending.mockResolvedValue({ notifications: [] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("adds default sound to scheduled local notifications on iOS", async () => {
@@ -71,10 +107,30 @@ describe("notifications", () => {
       notifications: [
         expect.objectContaining({
           body: "Drink water",
+          silent: false,
           sound: "default",
           title: "Reminder",
         }),
       ],
+    });
+  });
+
+  it("does not time out the iOS permission prompt at the generic limit", async () => {
+    vi.useFakeTimers();
+    const permissionDeferred = createDeferred<Record<string, string>>();
+    localNotificationMocks.requestPermissions.mockReturnValueOnce(
+      permissionDeferred.promise,
+    );
+
+    const permission = requestNotificationPermission();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(storageMocks.updateSettings).not.toHaveBeenCalled();
+
+    permissionDeferred.resolve({ display: "granted" });
+    await expect(permission).resolves.toBe("granted");
+    expect(storageMocks.updateSettings).toHaveBeenCalledWith({
+      notificationPermissionStatus: "granted",
     });
   });
 
@@ -101,6 +157,49 @@ describe("notifications", () => {
       }),
     );
   });
+
+  it("coalesces overlapping full notification rebuilds", async () => {
+    const cancelDeferred = createDeferred<void>();
+    const storedReminder: Reminder = {
+      ...reminder,
+      schedule: {
+        ...reminder.schedule,
+        daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+        startTime: "00:00",
+        endTime: "23:59",
+        intervalMinutes: 60,
+      },
+    };
+
+    localNotificationMocks.getPending.mockResolvedValue({
+      notifications: [
+        {
+          id: 1,
+          title: "Reminder",
+          body: "Drink water",
+          extra: { app: "flexible-reminder" },
+        },
+      ],
+    });
+    localNotificationMocks.cancel
+      .mockReturnValueOnce(cancelDeferred.promise)
+      .mockResolvedValue(undefined);
+
+    storageMocks.reminders = [storedReminder];
+
+    const first = rescheduleAllNotifications();
+    const second = rescheduleAllNotifications();
+
+    expect(second).toBe(first);
+    await vi.waitFor(() => {
+      expect(localNotificationMocks.cancel).toHaveBeenCalledTimes(1);
+    });
+
+    cancelDeferred.resolve();
+    await first;
+
+    expect(localNotificationMocks.schedule).toHaveBeenCalledTimes(1);
+  });
 });
 
 function createOccurrence(scheduledFor: Date): ReminderOccurrence {
@@ -111,4 +210,13 @@ function createOccurrence(scheduledFor: Date): ReminderOccurrence {
     status: "pending",
     source: "schedule",
   };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+
+  return { promise, resolve };
 }

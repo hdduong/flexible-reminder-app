@@ -103,6 +103,10 @@ button {
   width: min(393px, calc(100vw - 24px));
 }
 
+.phone-with-toast {
+  grid-template-rows: 1fr auto 82px;
+}
+
 .loading-phone {
   align-items: center;
   display: flex;
@@ -370,55 +374,6 @@ button {
   text-align: center;
 }
 
-.app-toast {
-  animation: toast-in 180ms ease-out;
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow);
-  color: #ffffff;
-  font-size: 0.9rem;
-  font-weight: 600;
-  left: 16px;
-  padding: 12px 16px;
-  position: absolute;
-  right: 16px;
-  text-align: center;
-  top: max(12px, env(safe-area-inset-top));
-  z-index: 20;
-}
-
-.app-toast--success {
-  background: var(--green);
-}
-
-.app-toast--error {
-  background: var(--red);
-}
-
-@keyframes toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-toast {
-    animation: none;
-  }
-}
-
-input[aria-invalid="true"] {
-  border-color: var(--red);
-}
-
-input[aria-invalid="true"]:focus {
-  box-shadow: 0 0 0 3px var(--red-bg);
-}
-
 .editor-panel {
   background: var(--surface);
   border: 0;
@@ -566,24 +521,51 @@ select:focus {
   display: inline-flex;
 }
 
-.error-message,
-.success-message {
-  border-radius: var(--radius-sm);
-  font-size: 0.86rem;
+.app-toast {
+  animation: toast-in 180ms ease-out;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  color: #ffffff;
+  font-size: 0.9rem;
   font-weight: 600;
-  line-height: 1.35;
-  margin: 12px 16px 0;
-  padding: 11px 12px;
+  line-height: 1.25;
+  margin: 0 18px 10px;
+  padding: 12px 16px;
+  position: relative;
+  text-align: center;
+  z-index: 20;
 }
 
-.error-message {
-  background: var(--red-bg);
-  color: var(--red);
+.app-toast--success {
+  background: var(--green);
 }
 
-.success-message {
-  background: var(--green-bg);
-  color: var(--green);
+.app-toast--error {
+  background: var(--red);
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateY(-8px);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-toast {
+    animation: none;
+  }
+}
+
+input[aria-invalid="true"] {
+  border-color: var(--red);
+}
+
+input[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 3px var(--red-bg);
 }
 
 .saved-row {
