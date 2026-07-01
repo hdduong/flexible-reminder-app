@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppSettings,
   CreateReminderInput,
+  NotificationPermissionStatus,
   Reminder,
   ReminderOccurrence,
   ReminderSchedule,
@@ -27,8 +28,11 @@ import {
   previewSchedule as previewReminderSchedule,
 } from "./services/schedule";
 import {
+  getNotificationDiagnostics,
+  getNotificationPermissionStatus,
   requestNotificationPermission,
   rescheduleAllNotifications,
+  sendTestNotification,
 } from "./services/notifications";
 
 type RepeatMode = "interval" | "exact_times";
@@ -609,6 +613,115 @@ function SettingsScreen({
   onChange: (next: AppSettings) => void;
   reminderCount: number;
 }) {
+  const [notificationStatus, setNotificationStatus] =
+    useState<NotificationPermissionStatus>("unknown");
+  const [notificationDiagnostics, setNotificationDiagnostics] = useState<{
+    available: boolean;
+    enabled: boolean | null;
+    pending: number;
+    delivered: number;
+    nextAt: string | null;
+  } | null>(null);
+  const [notificationMessage, setNotificationMessage] = useState<string | null>(
+    null,
+  );
+  const [isNotificationBusy, setIsNotificationBusy] = useState(false);
+
+  useEffect(() => {
+    void refreshNotificationDiagnostics();
+  }, []);
+
+  async function refreshNotificationDiagnostics() {
+    try {
+      const [status, diagnostics] = await Promise.all([
+        getNotificationPermissionStatus(),
+        getNotificationDiagnostics(),
+      ]);
+      setNotificationStatus(status);
+      setNotificationDiagnostics(diagnostics);
+    } catch {
+      setNotificationStatus("unknown");
+      setNotificationDiagnostics(null);
+    }
+  }
+
+  async function enableNotifications() {
+    setIsNotificationBusy(true);
+    setNotificationMessage(null);
+
+    try {
+      const status = await requestNotificationPermission();
+      const diagnostics = await getNotificationDiagnostics();
+      setNotificationStatus(status);
+      setNotificationDiagnostics(diagnostics);
+
+      if (!diagnostics.available) {
+        setNotificationMessage(
+          "Notifications are not available in this build.",
+        );
+      } else if (status === "granted") {
+        await rescheduleAllNotifications();
+        await delayForNativeNotificationCommit();
+        setNotificationMessage("Notifications enabled. Reminders rescheduled.");
+      } else {
+        setNotificationMessage(
+          "Notifications are blocked in iOS Settings. If no Notifications row appears, reinstall the TestFlight app and tap Enable again.",
+        );
+      }
+
+      await refreshNotificationDiagnostics();
+    } finally {
+      setIsNotificationBusy(false);
+    }
+  }
+
+  async function sendTest() {
+    setIsNotificationBusy(true);
+    setNotificationMessage(null);
+
+    try {
+      const result = await sendTestNotification();
+
+      if (result === "scheduled") {
+        setNotificationMessage("Test notification scheduled for about 10 seconds.");
+      } else if (result === "denied") {
+        setNotificationMessage("Allow notifications before sending a test.");
+      } else {
+        setNotificationMessage("Notifications are not available in this build.");
+      }
+
+      if (result === "scheduled") {
+        await delayForNativeNotificationCommit();
+      }
+      await refreshNotificationDiagnostics();
+    } finally {
+      setIsNotificationBusy(false);
+    }
+  }
+
+  const statusLabel =
+    notificationDiagnostics?.available === false
+      ? "unavailable"
+      : notificationStatus === "granted"
+      ? "allowed"
+      : notificationStatus === "denied"
+        ? "blocked"
+        : "not requested";
+  const pendingLabel = notificationDiagnostics
+    ? `${notificationDiagnostics.pending} pending · ${notificationDiagnostics.delivered} delivered${
+        notificationDiagnostics.nextAt
+          ? ` · next ${formatDisplayTime(
+              toLocalTime(new Date(notificationDiagnostics.nextAt)),
+            )}`
+          : ""
+      }`
+    : "Checking scheduled notifications...";
+  const isEnabledLabel =
+    notificationDiagnostics?.enabled === false ? " · disabled" : "";
+  const canRequestNotifications =
+    notificationStatus !== "granted" &&
+    notificationDiagnostics?.available !== false;
+
   return (
     <div className="screen settings-screen">
       <header className="screen-header compact">
@@ -621,10 +734,40 @@ function SettingsScreen({
       <section className="permission-card">
         <BuzzLogo />
         <div>
-          <strong>Notifications {settings.notificationPermissionStatus === "granted" ? "allowed" : "not requested"}</strong>
-          <span>Local iPhone reminders work offline.</span>
+          <strong>
+            Notifications {statusLabel}
+            {isEnabledLabel}
+          </strong>
+          <span>{pendingLabel}</span>
         </div>
       </section>
+
+      <div className="notification-actions">
+        {canRequestNotifications && (
+          <button
+            type="button"
+            className="primary-button"
+            disabled={isNotificationBusy}
+            onClick={() => void enableNotifications()}
+          >
+            Enable
+          </button>
+        )}
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={isNotificationBusy}
+          onClick={() => void sendTest()}
+        >
+          Send Test
+        </button>
+      </div>
+
+      {notificationMessage && (
+        <div className="settings-note" role="status">
+          {notificationMessage}
+        </div>
+      )}
 
       <div className="settings-list">
         <SettingsRow label="Default snooze" value={`${settings.defaultSnoozeMinutes} minutes`}>
@@ -873,6 +1016,14 @@ function OccurrenceRow({ occurrence }: { occurrence: DisplayOccurrence }) {
       <em>{occurrence.tag}</em>
     </div>
   );
+}
+
+function delayForNativeNotificationCommit(): Promise<void> {
+  // Capacitor's iOS schedule call resolves before UNUserNotificationCenter's
+  // add callback finishes, so a brief pause makes the pending count less racy.
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 350);
+  });
 }
 
 function TabBar({ active, onChange, onAdd }: { active: Tab; onChange: (tab: Tab) => void; onAdd: () => void }) {

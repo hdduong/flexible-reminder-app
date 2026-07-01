@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings, Reminder, ReminderOccurrence } from "../types";
 import { createDefaultSettings } from "../types";
 import {
+  getNotificationDiagnostics,
   requestNotificationPermission,
   rescheduleAllNotifications,
   scheduleOccurrenceNotifications,
+  sendTestNotification,
 } from "./notifications";
 
 const capacitorMocks = vi.hoisted(() => ({
@@ -18,6 +20,8 @@ const localNotificationMocks = vi.hoisted(() => ({
   schedule: vi.fn(),
   cancel: vi.fn(),
   getPending: vi.fn(),
+  getDeliveredNotifications: vi.fn(),
+  areEnabled: vi.fn(),
 }));
 
 const storageMocks = vi.hoisted(() => ({
@@ -88,6 +92,10 @@ describe("notifications", () => {
     localNotificationMocks.schedule.mockResolvedValue({ notifications: [] });
     localNotificationMocks.cancel.mockResolvedValue(undefined);
     localNotificationMocks.getPending.mockResolvedValue({ notifications: [] });
+    localNotificationMocks.getDeliveredNotifications.mockResolvedValue({
+      notifications: [],
+    });
+    localNotificationMocks.areEnabled.mockResolvedValue({ value: true });
   });
 
   afterEach(() => {
@@ -115,7 +123,7 @@ describe("notifications", () => {
     });
   });
 
-  it("does not time out the iOS permission prompt at the generic limit", async () => {
+  it("waits for the iOS permission prompt without a native timeout", async () => {
     vi.useFakeTimers();
     const permissionDeferred = createDeferred<Record<string, string>>();
     localNotificationMocks.requestPermissions.mockReturnValueOnce(
@@ -124,7 +132,7 @@ describe("notifications", () => {
 
     const permission = requestNotificationPermission();
 
-    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(65_000);
     expect(storageMocks.updateSettings).not.toHaveBeenCalled();
 
     permissionDeferred.resolve({ display: "granted" });
@@ -132,6 +140,83 @@ describe("notifications", () => {
     expect(storageMocks.updateSettings).toHaveBeenCalledWith({
       notificationPermissionStatus: "granted",
     });
+  });
+
+  it("reports pending and delivered app notification diagnostics", async () => {
+    const nextAt = new Date(Date.now() + 60_000).toISOString();
+    localNotificationMocks.getPending.mockResolvedValueOnce({
+      notifications: [
+        {
+          id: 1,
+          title: "Reminder",
+          body: "Drink water",
+          schedule: { at: nextAt },
+          extra: { app: "flexible-reminder" },
+        },
+        {
+          id: 2,
+          title: "Other",
+          body: "Ignore",
+          schedule: { at: new Date(Date.now() + 30_000).toISOString() },
+          extra: { app: "someone-else" },
+        },
+      ],
+    });
+    localNotificationMocks.getDeliveredNotifications.mockResolvedValueOnce({
+      notifications: [
+        {
+          id: 3,
+          title: "Reminder",
+          body: "Already delivered",
+          extra: { app: "flexible-reminder" },
+        },
+      ],
+    });
+
+    await expect(getNotificationDiagnostics()).resolves.toEqual({
+      available: true,
+      delivered: 1,
+      enabled: true,
+      nextAt,
+      pending: 1,
+    });
+  });
+
+  it("schedules a visible test notification for on-device verification", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+
+    await expect(sendTestNotification()).resolves.toBe("scheduled");
+
+    expect(localNotificationMocks.schedule).toHaveBeenCalledWith({
+      notifications: [
+        expect.objectContaining({
+          body: "If you can see this, notifications are working.",
+          silent: false,
+          sound: "default",
+          title: "Test reminder",
+          extra: expect.objectContaining({
+            app: "flexible-reminder",
+            test: true,
+          }),
+          schedule: expect.objectContaining({
+            at: new Date("2026-06-29T12:00:10.000Z"),
+            allowWhileIdle: true,
+          }),
+        }),
+      ],
+    });
+  });
+
+  it("does not request permission from the test notification action", async () => {
+    localNotificationMocks.checkPermissions.mockResolvedValueOnce({
+      display: "denied",
+    });
+
+    await expect(sendTestNotification()).resolves.toBe("denied");
+
+    expect(localNotificationMocks.requestPermissions).not.toHaveBeenCalled();
+    expect(localNotificationMocks.schedule).not.toHaveBeenCalled();
   });
 
   it("skips past and too-close occurrences before calling native scheduling", async () => {
