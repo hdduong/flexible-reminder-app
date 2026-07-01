@@ -18,9 +18,8 @@ import {
 } from "./storage";
 import {
   cancelOccurrenceNotification,
-  cancelReminderNotifications,
+  reconcileReminderNotifications,
   scheduleOccurrenceNotification,
-  scheduleReminderNotifications,
 } from "./notifications";
 import {
   createOccurrence,
@@ -163,7 +162,7 @@ export async function createReminder(
   await saveReminders([...reminders, reminder]);
 
   if (reminder.enabled) {
-    scheduleReminderNotificationsInBackground(reminder.id);
+    void reconcileReminderNotifications(reminder.id, true);
   }
 
   return reminder;
@@ -207,11 +206,10 @@ export async function updateReminder(
 
   reminders[index] = next;
   await saveReminders(reminders);
-  await cancelReminderNotifications(id);
-
-  if (next.enabled) {
-    await scheduleReminderNotifications(id);
-  }
+  // Persist immediately and reconcile notifications on the serialized queue so
+  // the UI never blocks on the native bridge and a late cancel can't wipe a
+  // freshly scheduled reminder.
+  void reconcileReminderNotifications(id, next.enabled);
 
   return next;
 }
@@ -235,7 +233,7 @@ export async function deleteReminder(id: string): Promise<void> {
   };
 
   await saveReminders(reminders);
-  await cancelReminderNotifications(id);
+  void reconcileReminderNotifications(id, false);
 }
 
 export async function setReminderEnabled(
@@ -417,8 +415,4 @@ function normalizeOptionalMinutes(
 
 function normalizeSchedule(schedule: ReminderSchedule): ReminderSchedule {
   return validateReminderSchedule(schedule);
-}
-
-function scheduleReminderNotificationsInBackground(reminderId: string): void {
-  void scheduleReminderNotifications(reminderId).catch(() => undefined);
 }
