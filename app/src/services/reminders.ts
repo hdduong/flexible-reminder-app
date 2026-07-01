@@ -207,11 +207,9 @@ export async function updateReminder(
 
   reminders[index] = next;
   await saveReminders(reminders);
-  await cancelReminderNotifications(id);
-
-  if (next.enabled) {
-    await scheduleReminderNotifications(id);
-  }
+  // Persist immediately and reconcile notifications in the background so the UI
+  // never blocks on the native bridge (cancel + reschedule can take seconds).
+  refreshReminderNotificationsInBackground(id, next.enabled);
 
   return next;
 }
@@ -235,7 +233,7 @@ export async function deleteReminder(id: string): Promise<void> {
   };
 
   await saveReminders(reminders);
-  await cancelReminderNotifications(id);
+  cancelReminderNotificationsInBackground(id);
 }
 
 export async function setReminderEnabled(
@@ -421,4 +419,21 @@ function normalizeSchedule(schedule: ReminderSchedule): ReminderSchedule {
 
 function scheduleReminderNotificationsInBackground(reminderId: string): void {
   void scheduleReminderNotifications(reminderId).catch(() => undefined);
+}
+
+function refreshReminderNotificationsInBackground(
+  reminderId: string,
+  enabled: boolean,
+): void {
+  void (async () => {
+    if (enabled) {
+      await scheduleReminderNotifications(reminderId);
+    } else {
+      await cancelReminderNotifications(reminderId);
+    }
+  })().catch(() => undefined);
+}
+
+function cancelReminderNotificationsInBackground(reminderId: string): void {
+  void cancelReminderNotifications(reminderId).catch(() => undefined);
 }

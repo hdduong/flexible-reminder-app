@@ -186,6 +186,12 @@ function App() {
   async function saveReminder() {
     setErrorMessage(null);
     setSuccessMessage(null);
+
+    if (!draft.text.trim()) {
+      setErrorMessage("Reminder text is required.");
+      return;
+    }
+
     const wasEditing = Boolean(editingId);
 
     try {
@@ -205,30 +211,40 @@ function App() {
   }
 
   async function toggleReminder(id: string, enabled: boolean) {
-    await setReminderEnabled(id, enabled);
-    await refreshReminders();
+    // Optimistic: flip the switch instantly, then persist. Notification work
+    // happens in the background (see reminders service), so this never blocks.
+    setReminders((current) =>
+      current.map((reminder) => (reminder.id === id ? { ...reminder, enabled } : reminder)),
+    );
+
+    try {
+      await setReminderEnabled(id, enabled);
+    } catch {
+      await refreshReminders();
+    }
   }
 
   async function removeReminder(id: string) {
     setErrorMessage(null);
     setSuccessMessage(null);
+    // Optimistic: remove the row immediately; restore it only if delete fails.
+    setReminders((current) => current.filter((reminder) => reminder.id !== id));
+
+    if (editingId === id) {
+      setEditingId(null);
+      setDraft({
+        ...newReminderTemplate,
+        snoozeMinutes: settings.defaultSnoozeMinutes,
+      });
+    }
 
     try {
       await deleteReminder(id);
-
-      if (editingId === id) {
-        setEditingId(null);
-        setDraft({
-          ...newReminderTemplate,
-          snoozeMinutes: settings.defaultSnoozeMinutes,
-        });
-      }
-
-      await refreshReminders();
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Unable to remove reminder.",
       );
+      await refreshReminders();
     }
   }
 
@@ -267,6 +283,14 @@ function App() {
   return (
     <main className="app-shell">
       <section className="phone">
+        {(errorMessage || successMessage) && (
+          <div
+            className={errorMessage ? "app-toast app-toast--error" : "app-toast app-toast--success"}
+            role={errorMessage ? "alert" : "status"}
+          >
+            {errorMessage ?? successMessage}
+          </div>
+        )}
         <div className="phone-content">
           {tab === "today" && (
             <TodayScreen
@@ -418,7 +442,13 @@ function RemindersScreen({
       <section className="editor-panel">
         <label>
           <span>Reminder text</span>
-          <input value={draft.text} maxLength={120} placeholder="Try bathroom" onChange={(event) => onDraftChange({ ...draft, text: event.target.value })} />
+          <input
+            value={draft.text}
+            maxLength={120}
+            placeholder="Try bathroom"
+            aria-invalid={errorMessage === "Reminder text is required." || undefined}
+            onChange={(event) => onDraftChange({ ...draft, text: event.target.value })}
+          />
         </label>
 
         <label>
@@ -487,18 +517,6 @@ function RemindersScreen({
             ))}
           </div>
         </div>
-
-        {successMessage && (
-          <div className="success-message" role="status">
-            {successMessage}
-          </div>
-        )}
-
-        {errorMessage && (
-          <div className="error-message" role="alert">
-            {errorMessage}
-          </div>
-        )}
 
         <button type="button" className="primary-button" onClick={() => void onSave()}>
           {editingId ? "Save Changes" : "Save Reminder"}
