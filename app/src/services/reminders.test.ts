@@ -2,9 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CreateReminderInput } from "../types";
 import {
   createReminder,
+  deleteReminder,
+  getReminder,
   listReminders,
   removeLegacyStarterReminders,
+  updateReminder,
 } from "./reminders";
+import { cancelReminderNotifications } from "./notifications";
 import { removeStoredValue, STORAGE_KEYS } from "./storage";
 
 const STARTER_CLEANUP_KEY = "migration:starterCleanup:v1";
@@ -92,6 +96,31 @@ describe("reminders", () => {
 
     expect(reminder.text).toBe("Stretch");
     await expect(listReminders()).resolves.toHaveLength(1);
+  });
+
+  it("does not block reminder updates on notification scheduling", async () => {
+    const created = await createReminder(reminderInput);
+
+    // scheduleReminderNotifications is mocked to never resolve; updateReminder
+    // must still resolve and persist because it reconciles in the background.
+    const updated = await updateReminder(created.id, { text: "Stretch more" });
+
+    expect(updated.text).toBe("Stretch more");
+    await expect(getReminder(created.id)).resolves.toMatchObject({
+      text: "Stretch more",
+    });
+  });
+
+  it("does not block reminder deletion on notification cancellation", async () => {
+    const created = await createReminder(reminderInput);
+    vi.mocked(cancelReminderNotifications).mockReturnValueOnce(
+      new Promise<void>(() => undefined),
+    );
+
+    await deleteReminder(created.id);
+
+    await expect(listReminders()).resolves.toHaveLength(0);
+    await expect(getReminder(created.id)).resolves.toBeNull();
   });
 
   it("removes untouched seeded starter reminders", async () => {

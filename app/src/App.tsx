@@ -227,10 +227,16 @@ function App() {
   async function removeReminder(id: string) {
     setErrorMessage(null);
     setSuccessMessage(null);
+
+    // Capture edit state so a failed delete can restore the editor + draft.
+    const wasEditingRemoved = editingId === id;
+    const previousEditingId = editingId;
+    const previousDraft = draft;
+
     // Optimistic: remove the row immediately; restore it only if delete fails.
     setReminders((current) => current.filter((reminder) => reminder.id !== id));
 
-    if (editingId === id) {
+    if (wasEditingRemoved) {
       setEditingId(null);
       setDraft({
         ...newReminderTemplate,
@@ -245,6 +251,10 @@ function App() {
         error instanceof Error ? error.message : "Unable to remove reminder.",
       );
       await refreshReminders();
+      if (wasEditingRemoved) {
+        setEditingId(previousEditingId);
+        setDraft(previousDraft);
+      }
     }
   }
 
