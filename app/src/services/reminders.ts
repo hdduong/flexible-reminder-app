@@ -12,7 +12,9 @@ import {
   appendReminderEvent,
   getSettings,
   listRemindersFromStorage,
+  readJson,
   saveReminders,
+  writeJson,
 } from "./storage";
 import {
   cancelOccurrenceNotification,
@@ -31,6 +33,100 @@ import {
 } from "./schedule";
 
 const MAX_REMINDER_TEXT_LENGTH = 120;
+
+const STARTER_CLEANUP_KEY = "migration:starterCleanup:v1";
+
+// Exact shape of the three reminders earlier builds auto-seeded (after schedule
+// normalization). Timezone is intentionally excluded because it is device-
+// specific; everything else uniquely identifies an untouched sample.
+interface LegacyStarterSignature {
+  text: string;
+  privateNotificationText: string | null;
+  daysOfWeek: number[];
+  startTime: string;
+  endTime: string;
+  mode: ReminderSchedule["mode"];
+  intervalMinutes: number | null;
+  exactTimes: string[];
+  snoozeMinutesOverride: number | null;
+}
+
+const LEGACY_STARTER_SIGNATURES: readonly LegacyStarterSignature[] = [
+  {
+    text: "Try bathroom",
+    privateNotificationText: "Quick break",
+    daysOfWeek: [1, 2, 3, 4, 5],
+    startTime: "09:00",
+    endTime: "17:00",
+    mode: "interval",
+    intervalMinutes: 120,
+    exactTimes: [],
+    snoozeMinutesOverride: 10,
+  },
+  {
+    text: "Drink water",
+    privateNotificationText: null,
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+    startTime: "09:00",
+    endTime: "17:00",
+    mode: "interval",
+    intervalMinutes: 180,
+    exactTimes: [],
+    snoozeMinutesOverride: 10,
+  },
+  {
+    text: "Study English",
+    privateNotificationText: null,
+    daysOfWeek: [1, 2, 4],
+    startTime: "18:30",
+    endTime: "20:30",
+    mode: "exact_times",
+    intervalMinutes: null,
+    exactTimes: ["18:30"],
+    snoozeMinutesOverride: 10,
+  },
+];
+
+function sameOrder(left: readonly (number | string)[], right: readonly (number | string)[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function matchesLegacyStarter(reminder: Reminder): boolean {
+  return LEGACY_STARTER_SIGNATURES.some((signature) => {
+    const schedule = reminder.schedule;
+    return (
+      reminder.text === signature.text &&
+      (reminder.privateNotificationText ?? null) === signature.privateNotificationText &&
+      reminder.snoozeMinutesOverride === signature.snoozeMinutesOverride &&
+      schedule.mode === signature.mode &&
+      schedule.intervalMinutes === signature.intervalMinutes &&
+      schedule.startTime === signature.startTime &&
+      schedule.endTime === signature.endTime &&
+      sameOrder(schedule.daysOfWeek, signature.daysOfWeek) &&
+      sameOrder(schedule.exactTimes, signature.exactTimes)
+    );
+  });
+}
+
+// One-time migration: earlier builds auto-seeded three sample reminders. Remove
+// any that still exactly match a seeded sample (so a reminder the user created
+// or edited — even one sharing a sample's text — is never deleted), then record
+// that it ran so it can never remove a later look-alike.
+export async function removeLegacyStarterReminders(): Promise<void> {
+  const alreadyCleaned = await readJson<boolean>(STARTER_CLEANUP_KEY, false);
+  if (alreadyCleaned) {
+    return;
+  }
+
+  const reminders = await listRemindersFromStorage();
+  const remaining = reminders.filter((reminder) => !matchesLegacyStarter(reminder));
+
+  if (remaining.length !== reminders.length) {
+    await saveReminders(remaining);
+  }
+
+  await writeJson(STARTER_CLEANUP_KEY, true);
+}
 
 export async function listReminders(): Promise<Reminder[]> {
   return (await listRemindersFromStorage()).filter(

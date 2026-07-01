@@ -62,7 +62,7 @@ button {
   border-radius: 34px;
   box-shadow: 0 22px 70px rgba(43, 27, 18, 0.22);
   display: grid;
-  grid-template-rows: 62px 1fr 78px;
+  grid-template-rows: 1fr 78px;
   height: min(852px, calc(100vh - 32px));
   max-height: 852px;
   max-width: 393px;
@@ -86,44 +86,10 @@ button {
   width: 58px;
 }
 
-.status-bar {
-  align-items: center;
-  display: flex;
-  font-size: 0.88rem;
-  font-weight: 800;
-  justify-content: space-between;
-  padding: 18px 24px 8px;
-}
-
-.status-icons {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-}
-
-.battery {
-  border: 1.5px solid var(--ink);
-  border-radius: 3px;
-  display: inline-block;
-  height: 12px;
-  position: relative;
-  width: 25px;
-}
-
-.battery::after {
-  background: var(--ink);
-  border-radius: 0 2px 2px 0;
-  content: "";
-  height: 6px;
-  position: absolute;
-  right: -4px;
-  top: 2px;
-  width: 2px;
-}
-
 .phone-content {
   min-height: 0;
   overflow: hidden auto;
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .screen {
@@ -320,6 +286,12 @@ button {
   font-style: normal;
   font-weight: 800;
   padding: 7px 10px;
+}
+
+.next-time {
+  color: var(--terracotta);
+  font-size: 0.74rem;
+  font-weight: 800;
 }
 
 .empty-state {

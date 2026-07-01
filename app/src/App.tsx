@@ -13,6 +13,7 @@ import {
   deleteReminder,
   listReminders,
   markDone,
+  removeLegacyStarterReminders,
   setReminderEnabled,
   skipOccurrence,
   snoozeOccurrence,
@@ -20,6 +21,8 @@ import {
 } from "./services/reminders";
 import { getSettings, updateSettings } from "./services/storage";
 import {
+  addDays,
+  generateOccurrencesForReminder,
   listTodayOccurrences as listScheduledTodayOccurrences,
   previewSchedule as previewReminderSchedule,
 } from "./services/schedule";
@@ -63,51 +66,6 @@ const repeatMinuteOptions = Array.from({ length: 60 }, (_, minute) => minute);
 const maxRepeatIntervalMinutes = 24 * 60;
 const swipeRevealPixels = 96;
 const swipeOpenThresholdPixels = 44;
-
-const starterInputs: CreateReminderInput[] = [
-  {
-    text: "Try bathroom",
-    privateNotificationText: "Quick break",
-    schedule: {
-      daysOfWeek: workweek,
-      startTime: "09:00",
-      endTime: "17:00",
-      mode: "interval",
-      intervalMinutes: 120,
-      exactTimes: [],
-      timezone: getDeviceTimezone(),
-    },
-    snoozeMinutesOverride: 10,
-  },
-  {
-    text: "Drink water",
-    privateNotificationText: null,
-    schedule: {
-      daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-      startTime: "09:00",
-      endTime: "17:00",
-      mode: "interval",
-      intervalMinutes: 180,
-      exactTimes: [],
-      timezone: getDeviceTimezone(),
-    },
-    snoozeMinutesOverride: 10,
-  },
-  {
-    text: "Study English",
-    privateNotificationText: null,
-    schedule: {
-      daysOfWeek: [1, 2, 4],
-      startTime: "18:30",
-      endTime: "20:30",
-      mode: "exact_times",
-      intervalMinutes: null,
-      exactTimes: ["18:30"],
-      timezone: getDeviceTimezone(),
-    },
-    snoozeMinutesOverride: 10,
-  },
-];
 
 const newReminderTemplate: DraftReminder = {
   id: null,
@@ -164,16 +122,10 @@ function App() {
     setErrorMessage(null);
 
     try {
+      await removeLegacyStarterReminders();
       const [storedSettings, storedReminders] = await Promise.all([getSettings(), listReminders()]);
-
-      if (storedReminders.length === 0) {
-        for (const input of starterInputs) {
-          await createReminder(input);
-        }
-      }
-
       setSettings(storedSettings);
-      setReminders(await listReminders());
+      setReminders(storedReminders);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to load reminders.");
     } finally {
@@ -315,7 +267,6 @@ function App() {
   return (
     <main className="app-shell">
       <section className="phone">
-        <StatusBar />
         <div className="phone-content">
           {tab === "today" && (
             <TodayScreen
@@ -351,18 +302,6 @@ function App() {
         <TabBar active={tab} onChange={setTab} onAdd={openNewReminder} />
       </section>
     </main>
-  );
-}
-
-function StatusBar() {
-  return (
-    <div className="status-bar" aria-hidden="true">
-      <span>9:41</span>
-      <div className="status-icons">
-        <span>5G</span>
-        <span className="battery" />
-      </div>
-    </div>
   );
 }
 
@@ -568,15 +507,19 @@ function RemindersScreen({
       <section>
         <div className="section-title">Saved reminders</div>
         <div className="saved-list">
-          {reminders.map((reminder) => (
-            <SwipeableReminderRow
-              key={reminder.id}
-              reminder={reminder}
-              onEdit={onEdit}
-              onToggle={onToggle}
-              onDelete={onDelete}
-            />
-          ))}
+          {reminders.length === 0 ? (
+            <div className="empty-state">No reminders yet. Fill in the form above and tap Save Reminder.</div>
+          ) : (
+            reminders.map((reminder) => (
+              <SwipeableReminderRow
+                key={reminder.id}
+                reminder={reminder}
+                onEdit={onEdit}
+                onToggle={onToggle}
+                onDelete={onDelete}
+              />
+            ))
+          )}
         </div>
       </section>
     </div>
@@ -763,6 +706,7 @@ function SwipeableReminderRow({
           <div>
             <strong>{reminder.text}</strong>
             <span>{summarizeReminder(reminder)}</span>
+            <small className="next-time">{describeNextOccurrence(reminder)}</small>
           </div>
         </button>
         <label className="switch">
@@ -947,6 +891,41 @@ function fromDraft(draft: DraftReminder): Reminder {
     updatedAt: now,
     deletedAt: null,
   };
+}
+
+function describeNextOccurrence(reminder: Reminder, now = new Date()): string {
+  if (!reminder.enabled) {
+    return "Paused";
+  }
+
+  try {
+    // The next occurrence of any active schedule is always within a week, so
+    // bound the search instead of scanning the engine's default 30-day window.
+    const [next] = generateOccurrencesForReminder(reminder, {
+      from: now,
+      through: addDays(now, 8),
+      limit: 1,
+    });
+    if (!next) {
+      return "No upcoming times";
+    }
+
+    const date = new Date(next.scheduledFor);
+    const time = formatDisplayTime(toLocalTime(date));
+    const isToday =
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate();
+
+    if (isToday) {
+      return `Next today ${time}`;
+    }
+
+    const weekday = new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(date);
+    return `Next ${weekday} ${time}`;
+  } catch {
+    return "Next time unavailable";
+  }
 }
 
 function summarizeReminder(reminder: Reminder) {
