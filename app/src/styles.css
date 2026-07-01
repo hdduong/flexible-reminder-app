@@ -275,6 +275,26 @@ button {
   color: var(--accent);
 }
 
+.secondary-button {
+  background: var(--surface-muted);
+  border: 0;
+  border-radius: var(--radius-md);
+  color: var(--accent);
+  font-size: 0.96rem;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.secondary-button:active {
+  opacity: 0.55;
+}
+
+.primary-button:disabled,
+.secondary-button:disabled {
+  opacity: 0.5;
+}
+
 .section-title,
 .field-label {
   color: var(--secondary-label);
@@ -682,6 +702,23 @@ input[aria-invalid="true"]:focus {
   font-size: 1rem;
   font-weight: 600;
   margin-bottom: 3px;
+}
+
+.notification-actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.notification-actions .secondary-button:only-child {
+  grid-column: 1 / -1;
+}
+
+.settings-note {
+  color: var(--secondary-label);
+  font-size: 0.84rem;
+  line-height: 1.35;
+  padding: 0 4px;
 }
 
 .settings-row {
