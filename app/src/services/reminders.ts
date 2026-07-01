@@ -18,9 +18,8 @@ import {
 } from "./storage";
 import {
   cancelOccurrenceNotification,
-  cancelReminderNotifications,
+  reconcileReminderNotifications,
   scheduleOccurrenceNotification,
-  scheduleReminderNotifications,
 } from "./notifications";
 import {
   createOccurrence,
@@ -163,7 +162,7 @@ export async function createReminder(
   await saveReminders([...reminders, reminder]);
 
   if (reminder.enabled) {
-    scheduleReminderNotificationsInBackground(reminder.id);
+    void reconcileReminderNotifications(reminder.id, true);
   }
 
   return reminder;
@@ -207,9 +206,10 @@ export async function updateReminder(
 
   reminders[index] = next;
   await saveReminders(reminders);
-  // Persist immediately and reconcile notifications in the background so the UI
-  // never blocks on the native bridge (cancel + reschedule can take seconds).
-  refreshReminderNotificationsInBackground(id, next.enabled);
+  // Persist immediately and reconcile notifications on the serialized queue so
+  // the UI never blocks on the native bridge and a late cancel can't wipe a
+  // freshly scheduled reminder.
+  void reconcileReminderNotifications(id, next.enabled);
 
   return next;
 }
@@ -233,7 +233,7 @@ export async function deleteReminder(id: string): Promise<void> {
   };
 
   await saveReminders(reminders);
-  cancelReminderNotificationsInBackground(id);
+  void reconcileReminderNotifications(id, false);
 }
 
 export async function setReminderEnabled(
@@ -415,25 +415,4 @@ function normalizeOptionalMinutes(
 
 function normalizeSchedule(schedule: ReminderSchedule): ReminderSchedule {
   return validateReminderSchedule(schedule);
-}
-
-function scheduleReminderNotificationsInBackground(reminderId: string): void {
-  void scheduleReminderNotifications(reminderId).catch(() => undefined);
-}
-
-function refreshReminderNotificationsInBackground(
-  reminderId: string,
-  enabled: boolean,
-): void {
-  void (async () => {
-    if (enabled) {
-      await scheduleReminderNotifications(reminderId);
-    } else {
-      await cancelReminderNotifications(reminderId);
-    }
-  })().catch(() => undefined);
-}
-
-function cancelReminderNotificationsInBackground(reminderId: string): void {
-  void cancelReminderNotifications(reminderId).catch(() => undefined);
 }

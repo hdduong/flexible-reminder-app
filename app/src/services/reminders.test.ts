@@ -8,16 +8,16 @@ import {
   removeLegacyStarterReminders,
   updateReminder,
 } from "./reminders";
-import { cancelReminderNotifications } from "./notifications";
 import { removeStoredValue, STORAGE_KEYS } from "./storage";
 
 const STARTER_CLEANUP_KEY = "migration:starterCleanup:v1";
 
 vi.mock("./notifications", () => ({
   cancelOccurrenceNotification: vi.fn(),
-  cancelReminderNotifications: vi.fn(),
   scheduleOccurrenceNotification: vi.fn(),
-  scheduleReminderNotifications: vi.fn(
+  // Never resolves: proves the write path fires-and-forgets the reconcile and
+  // never blocks the returned promise on native notification work.
+  reconcileReminderNotifications: vi.fn(
     () => new Promise<void>(() => undefined),
   ),
 }));
@@ -101,7 +101,7 @@ describe("reminders", () => {
   it("does not block reminder updates on notification scheduling", async () => {
     const created = await createReminder(reminderInput);
 
-    // scheduleReminderNotifications is mocked to never resolve; updateReminder
+    // reconcileReminderNotifications is mocked to never resolve; updateReminder
     // must still resolve and persist because it reconciles in the background.
     const updated = await updateReminder(created.id, { text: "Stretch more" });
 
@@ -113,10 +113,9 @@ describe("reminders", () => {
 
   it("does not block reminder deletion on notification cancellation", async () => {
     const created = await createReminder(reminderInput);
-    vi.mocked(cancelReminderNotifications).mockReturnValueOnce(
-      new Promise<void>(() => undefined),
-    );
 
+    // reconcileReminderNotifications is mocked to never resolve; deleteReminder
+    // must still resolve and persist the deletion (background reconcile).
     await deleteReminder(created.id);
 
     await expect(listReminders()).resolves.toHaveLength(0);

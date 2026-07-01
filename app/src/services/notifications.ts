@@ -108,31 +108,69 @@ export async function getNotificationPermissionStatus(): Promise<
   }
 }
 
-let rescheduleInFlight: Promise<void> | null = null;
-let rescheduleQueued = false;
+// Every native-queue mutation runs through this single FIFO so they never
+// overlap or reorder: a late "cancel" can no longer wipe a freshly scheduled
+// reminder, and two reschedules can't clobber each other. Each step logs its
+// outcome + duration so scheduling is observable on-device instead of silent.
+let reconcileTail: Promise<void> = Promise.resolve();
+
+function enqueueReconcile(
+  label: string,
+  work: () => Promise<void>,
+): Promise<void> {
+  const run = reconcileTail.then(async () => {
+    const startedAt = Date.now();
+    try {
+      await work();
+      console.info(`[notifications] ${label}: ok (${Date.now() - startedAt}ms)`);
+    } catch (error) {
+      console.error(
+        `[notifications] ${label}: failed (${Date.now() - startedAt}ms)`,
+        error,
+      );
+    }
+  });
+  // The wrapper above swallows + logs, so the chain never rejects and stays alive.
+  reconcileTail = run;
+  return run;
+}
+
+// Serialized entry point for the reminder write path (create/update/delete):
+// schedule when the reminder should be active, otherwise cancel. Because the
+// queue preserves submission order, a disable-then-enable sequence ends up
+// scheduled (not cancelled), fixing the "saved but never arrives" race.
+export function reconcileReminderNotifications(
+  reminderId: string,
+  enabled: boolean,
+): Promise<void> {
+  return enqueueReconcile(
+    `${enabled ? "schedule" : "cancel"} ${reminderId}`,
+    () =>
+      enabled
+        ? scheduleReminderNotifications(reminderId)
+        : cancelReminderNotifications(reminderId),
+  );
+}
+
+let pendingReschedule: Promise<void> | null = null;
 
 export function rescheduleAllNotifications(): Promise<void> {
-  // A reschedule cancels the whole app queue and rebuilds it, so two running
-  // at once can clobber each other (one cancels while the other schedules).
-  // Serialize: run one at a time, coalescing extra calls into a single
-  // trailing re-run so the final state reflects the latest data.
-  if (rescheduleInFlight) {
-    rescheduleQueued = true;
-    return rescheduleInFlight;
+  // Coalesce: reuse an already queued/running full reschedule instead of piling
+  // up duplicates. It runs on the shared queue, so it never overlaps a
+  // per-reminder reconcile.
+  if (pendingReschedule) {
+    return pendingReschedule;
   }
 
-  rescheduleInFlight = (async () => {
-    try {
-      do {
-        rescheduleQueued = false;
-        await runRescheduleAllNotifications();
-      } while (rescheduleQueued);
-    } finally {
-      rescheduleInFlight = null;
-    }
-  })();
+  pendingReschedule = enqueueReconcile(
+    "reschedule-all",
+    runRescheduleAllNotifications,
+  );
+  void pendingReschedule.finally(() => {
+    pendingReschedule = null;
+  });
 
-  return rescheduleInFlight;
+  return pendingReschedule;
 }
 
 async function runRescheduleAllNotifications(): Promise<void> {
@@ -438,10 +476,14 @@ async function cancelNotifications(
 }
 
 function resetLocalNotificationsPlugin(): void {
-  // Drop the cached plugin handle and action-type registration so the next
-  // call re-resolves them. A transient native failure/timeout must not disable
-  // notifications for the rest of the session — the foreground reschedule and
-  // later actions can retry once the bridge is responsive again.
+  // Surface the failure instead of swallowing it silently, then drop the cached
+  // plugin handle and action-type registration so the next call re-resolves
+  // them. A transient native failure/timeout must not disable notifications for
+  // the rest of the session — the foreground reschedule and later actions can
+  // retry once the bridge is responsive again.
+  console.warn(
+    "[notifications] native call failed or timed out; plugin reset for retry",
+  );
   localNotificationsPromise = null;
   actionTypesRegistered = false;
 }
