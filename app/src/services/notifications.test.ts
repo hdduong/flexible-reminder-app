@@ -3,6 +3,7 @@ import type { AppSettings, Reminder, ReminderOccurrence } from "../types";
 import { createDefaultSettings } from "../types";
 import {
   getNotificationDiagnostics,
+  isNativeNotificationPlatform,
   requestNotificationPermission,
   rescheduleAllNotifications,
   scheduleOccurrenceNotifications,
@@ -100,6 +101,13 @@ describe("notifications", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("treats only the web platform as notification-incapable", () => {
+    expect(isNativeNotificationPlatform()).toBe(true);
+
+    capacitorMocks.getPlatform.mockReturnValue("web");
+    expect(isNativeNotificationPlatform()).toBe(false);
   });
 
   it("adds default sound to scheduled local notifications on iOS", async () => {

@@ -129,6 +129,64 @@ button {
   scrollbar-width: none;
 }
 
+/* Shown whenever the session runs outside the native Capacitor shell (Safari
+   or a Home Screen web app), where local notifications cannot exist. Sticky so
+   it stays visible on every tab until dismissed. */
+.web-notice {
+  align-items: flex-start;
+  /* Opaque: an orange tint layered over the surface, so scrolling content
+     never shows through the sticky notice. */
+  background:
+    linear-gradient(rgba(255, 149, 0, 0.16), rgba(255, 149, 0, 0.16)),
+    var(--surface);
+  border: 1px solid rgba(255, 149, 0, 0.45);
+  border-radius: var(--radius-md);
+  display: flex;
+  gap: 10px;
+  margin: 0 12px 10px;
+  padding: 10px 12px;
+  position: sticky;
+  /* Matches .phone-content's padding-top: on a full-bleed phone
+     (viewport-fit=cover) the scrollport's top edge is the physical screen
+     top, so sticking at 0 would slide the notice under the notch/status
+     bar. Pinning at the safe-area line keeps it fully visible. */
+  top: max(20px, env(safe-area-inset-top));
+  z-index: 5;
+}
+
+.web-notice > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.web-notice strong {
+  color: var(--label);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.web-notice span {
+  color: var(--secondary-label);
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.web-notice-dismiss {
+  background: transparent;
+  border: 0;
+  color: var(--secondary-label);
+  flex: 0 0 auto;
+  font-size: 1.35rem;
+  line-height: 1;
+  margin-left: auto;
+  min-height: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+
 .phone-content::-webkit-scrollbar {
   display: none;
 }

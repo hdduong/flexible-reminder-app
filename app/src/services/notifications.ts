@@ -67,6 +67,17 @@ let localNotificationsPromise: Promise<LocalNotificationsPlugin | null> | null =
   null;
 let actionTypesRegistered = false;
 
+// Local notifications only exist inside the native Capacitor shell. When the
+// app is opened in Safari or as a Home Screen web app, getPlatform() is "web",
+// no native plugin is reachable, and no iOS permission prompt or Settings
+// entry can ever appear — the UI uses this to say so explicitly instead of
+// letting a web session masquerade as a broken native app. Deliberately the
+// same predicate as loadLocalNotificationsPlugin, so the notice appears
+// exactly when the plugin is unreachable.
+export function isNativeNotificationPlatform(): boolean {
+  return Capacitor.getPlatform() !== "web";
+}
+
 export async function requestNotificationPermission(): Promise<
   "granted" | "denied"
 > {

@@ -193,6 +193,48 @@ test("removes saved reminders with a swipe action", async ({
   await expect(savedList).toContainText("No reminders yet");
 });
 
+test("explains that the web version cannot deliver notifications", async ({
+  page,
+}, testInfo) => {
+  const notice = page.locator(".web-notice");
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("Web version");
+  await expect(notice).toContainText("TestFlight");
+
+  const screenshot = await page.screenshot({
+    fullPage: true,
+    path: testInfo.outputPath("web-version-notice-mobile.png"),
+  });
+
+  await testInfo.attach("web-version-notice-mobile", {
+    body: screenshot,
+    contentType: "image/png",
+  });
+
+  // Settings names the real cause instead of hinting at a broken build.
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Send Test" }).click();
+  await expect(page.locator(".settings-note")).toContainText(
+    "This is the web version",
+  );
+
+  // The notice is dismissible for the session and stays gone across tabs.
+  await page
+    .getByRole("button", { name: "Dismiss web version notice" })
+    .click();
+  await expect(notice).toHaveCount(0);
+  await page.getByRole("button", { name: "Today" }).click();
+  await expect(notice).toHaveCount(0);
+
+  // Dismissal is session-only: relaunching shows the notice again. A second
+  // page shares this session's storage but not this test's storage-clearing
+  // init script, so it would expose a regression that persists the dismissal.
+  const relaunched = await page.context().newPage();
+  await relaunched.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(relaunched.locator(".web-notice")).toBeVisible();
+  await relaunched.close();
+});
+
 test("shows privacy and snooze settings", async ({ page }, testInfo) => {
   await page.getByRole("button", { name: "Settings" }).click();
 
