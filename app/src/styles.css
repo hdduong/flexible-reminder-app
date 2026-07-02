@@ -659,12 +659,17 @@ input[aria-invalid="true"]:focus {
 }
 
 .permission-card {
-  align-items: center;
+  align-items: flex-start;
   background: var(--surface);
   border-radius: var(--radius-lg);
   display: flex;
   gap: 14px;
   padding: 14px 16px;
+}
+
+.permission-card > div {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .permission-card .buzz-logo {
@@ -682,6 +687,64 @@ input[aria-invalid="true"]:focus {
   font-size: 1rem;
   font-weight: 600;
   margin-bottom: 3px;
+}
+
+.notif-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.notif-actions .primary-button,
+.notif-actions .ghost-button {
+  flex: 1 1 0;
+}
+
+.notif-actions button:disabled {
+  opacity: 0.55;
+}
+
+.ghost-button {
+  background: var(--surface-muted);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-md);
+  color: var(--label);
+  font-size: 0.96rem;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.settings-note {
+  color: var(--secondary-label);
+  font-size: 0.86rem;
+  margin: 10px 0 0;
+}
+
+.notif-debug {
+  border-top: 1px solid var(--separator);
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding-top: 12px;
+}
+
+.notif-debug > div {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 96px 1fr;
+}
+
+.notif-debug dt {
+  color: var(--secondary-label);
+  font-size: 0.82rem;
+}
+
+.notif-debug dd {
+  color: var(--label);
+  font-size: 0.82rem;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .settings-row {

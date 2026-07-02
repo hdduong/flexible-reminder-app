@@ -24,6 +24,21 @@ const DEFAULT_NOTIFICATION_SOUND = "default";
 const NOTIFICATION_PERMISSION_TIMEOUT_MS = 60_000;
 const NOTIFICATION_NATIVE_CALL_TIMEOUT_MS = 10_000;
 const NOTIFICATION_PLUGIN_LOAD_TIMEOUT_MS = 5_000;
+// A "send test now" fires this far in the future — far enough past the bridge
+// lead requirement to be accepted, near enough that the user can watch for it.
+const TEST_NOTIFICATION_LEAD_MS = 10_000;
+
+export interface NotificationDebugInfo {
+  platform: string;
+  nativePlatform: boolean;
+  pluginAvailable: boolean;
+  // The RAW checkPermissions result (or the error text) — NOT the swallowed
+  // "denied" fallback — so a failing bridge is distinguishable from a real
+  // OS denial on-device from a single screenshot.
+  permission: string;
+  pending: number;
+  nextAt: string | null;
+}
 
 type PermissionResponse = Record<string, string | undefined>;
 
@@ -112,6 +127,100 @@ export async function getNotificationPermissionStatus(): Promise<
     resetLocalNotificationsPlugin();
     return "denied";
   }
+}
+
+// On-device diagnostic. Everything the notification pipeline depends on, read
+// straight from the native bridge and surfaced verbatim so a single screenshot
+// tells us which stage is broken: platform "web" ⇒ the Capacitor bridge never
+// initialized (JS is running as a plain web page, so no native prompt/Settings
+// entry is even possible); a "check failed…" permission ⇒ the bridge is up but
+// the call errors/times out; "granted" with pending 0 ⇒ a scheduling problem.
+export async function getNotificationDebugInfo(): Promise<NotificationDebugInfo> {
+  const platform = Capacitor.getPlatform();
+  const nativePlatform = Capacitor.isNativePlatform();
+  const plugin = await getLocalNotificationsPlugin();
+  const pluginAvailable = plugin !== null;
+
+  let permission = "no plugin";
+  if (plugin?.checkPermissions) {
+    try {
+      const response = await withNativeTimeout(
+        plugin.checkPermissions(),
+        "debug.checkPermissions",
+        NOTIFICATION_NATIVE_CALL_TIMEOUT_MS,
+      );
+      permission =
+        response.display ??
+        response.receive ??
+        response.permission ??
+        JSON.stringify(response);
+    } catch (error) {
+      permission = `check failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
+    }
+  } else if (plugin) {
+    permission = "checkPermissions missing";
+  }
+
+  let pending = 0;
+  let nextAt: string | null = null;
+  if (plugin) {
+    const result = await getPendingNotifications(plugin);
+    const ours = (result?.notifications ?? []).filter(
+      (notification) => notification.extra?.app === APP_NOTIFICATION_MARKER,
+    );
+    pending = ours.length;
+    const times = ours
+      .map((notification) => notification.extra?.scheduledFor)
+      .filter((value): value is string => typeof value === "string")
+      .sort();
+    nextAt = times[0] ?? null;
+  }
+
+  return { platform, nativePlatform, pluginAvailable, permission, pending, nextAt };
+}
+
+// Fires a real notification ~10s out through the same schedule path the app
+// uses, so "does anything actually arrive on this device?" becomes a one-tap
+// test instead of waiting for a reminder's real occurrence. Runs on the shared
+// reconcile queue so it never races an in-flight reschedule.
+export async function sendTestNotification(): Promise<
+  "scheduled" | "denied" | "unavailable"
+> {
+  const plugin = await getLocalNotificationsPlugin();
+
+  if (!plugin) {
+    return "unavailable";
+  }
+
+  const permission = await requestNotificationPermission();
+  if (permission !== "granted") {
+    return "denied";
+  }
+
+  await enqueueReconcile("send-test", async () => {
+    await ensureActionTypesRegistered(plugin);
+    await withNativeTimeout(
+      plugin.schedule({
+        notifications: [
+          {
+            id: notificationIdForOccurrence(`test:${APP_NOTIFICATION_MARKER}`),
+            title: "Flexible Reminder test",
+            body: "If you can see this, notifications work on this device.",
+            sound: DEFAULT_NOTIFICATION_SOUND,
+            silent: false,
+            schedule: { at: new Date(Date.now() + TEST_NOTIFICATION_LEAD_MS) },
+            extra: { app: APP_NOTIFICATION_MARKER, test: true },
+          },
+        ],
+      }),
+      "LocalNotifications.schedule(test)",
+      NOTIFICATION_NATIVE_CALL_TIMEOUT_MS,
+    );
+  });
+
+  return "scheduled";
 }
 
 // Every native-queue mutation runs through this single FIFO so they never

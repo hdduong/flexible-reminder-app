@@ -27,8 +27,11 @@ import {
   previewSchedule as previewReminderSchedule,
 } from "./services/schedule";
 import {
+  getNotificationDebugInfo,
   requestNotificationPermission,
   rescheduleAllNotifications,
+  sendTestNotification,
+  type NotificationDebugInfo,
 } from "./services/notifications";
 
 type RepeatMode = "interval" | "exact_times";
@@ -151,6 +154,10 @@ function App() {
 
   async function refreshReminders() {
     setReminders(await listReminders());
+  }
+
+  async function refreshSettings() {
+    setSettings(await getSettings());
   }
 
   const todayOccurrences = useMemo(() => {
@@ -365,7 +372,12 @@ function App() {
           )}
 
           {tab === "settings" && (
-            <SettingsScreen settings={settings} onChange={saveSettings} reminderCount={reminders.length} />
+            <SettingsScreen
+              settings={settings}
+              onChange={saveSettings}
+              onSettingsRefresh={() => void refreshSettings()}
+              reminderCount={reminders.length}
+            />
           )}
         </div>
         {(errorMessage || successMessage) && (
@@ -603,12 +615,67 @@ function RemindersScreen({
 function SettingsScreen({
   settings,
   onChange,
+  onSettingsRefresh,
   reminderCount,
 }: {
   settings: AppSettings;
   onChange: (next: AppSettings) => void;
+  onSettingsRefresh: () => void;
   reminderCount: number;
 }) {
+  const [debug, setDebug] = useState<NotificationDebugInfo | null>(null);
+  const [busy, setBusy] = useState<null | "enable" | "test">(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const refreshDebug = async () => {
+    try {
+      setDebug(await getNotificationDebugInfo());
+    } catch {
+      setDebug(null);
+    }
+  };
+
+  useEffect(() => {
+    void refreshDebug();
+  }, []);
+
+  const handleEnable = async () => {
+    setBusy("enable");
+    setNote(null);
+    try {
+      const result = await requestNotificationPermission();
+      onSettingsRefresh();
+      setNote(
+        result === "granted"
+          ? "Notifications allowed."
+          : "Still not allowed — check the raw permission below.",
+      );
+    } finally {
+      await refreshDebug();
+      setBusy(null);
+    }
+  };
+
+  const handleTest = async () => {
+    setBusy("test");
+    setNote(null);
+    try {
+      const result = await sendTestNotification();
+      setNote(
+        result === "scheduled"
+          ? "Test scheduled — leave the app; it should arrive in ~10 seconds."
+          : result === "denied"
+            ? "Permission not granted, so nothing was scheduled."
+            : "Notifications are unavailable on this platform.",
+      );
+    } finally {
+      await refreshDebug();
+      setBusy(null);
+    }
+  };
+
+  const granted = settings.notificationPermissionStatus === "granted";
+
   return (
     <div className="screen settings-screen">
       <header className="screen-header compact">
@@ -621,8 +688,61 @@ function SettingsScreen({
       <section className="permission-card">
         <BuzzLogo />
         <div>
-          <strong>Notifications {settings.notificationPermissionStatus === "granted" ? "allowed" : "not requested"}</strong>
+          <strong>Notifications {granted ? "allowed" : "not requested"}</strong>
           <span>Local iPhone reminders work offline.</span>
+
+          <div className="notif-actions">
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => void handleEnable()}
+              disabled={busy !== null}
+            >
+              {busy === "enable" ? "Requesting…" : "Enable notifications"}
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => void handleTest()}
+              disabled={busy !== null}
+            >
+              {busy === "test" ? "Sending…" : "Send test notification"}
+            </button>
+          </div>
+
+          {note && <p className="settings-note">{note}</p>}
+
+          {debug && (
+            <dl className="notif-debug">
+              <div>
+                <dt>Platform</dt>
+                <dd>
+                  {debug.platform}
+                  {debug.nativePlatform ? "" : " (not native)"}
+                </dd>
+              </div>
+              <div>
+                <dt>Plugin</dt>
+                <dd>{debug.pluginAvailable ? "available" : "missing"}</dd>
+              </div>
+              <div>
+                <dt>Permission</dt>
+                <dd>{debug.permission}</dd>
+              </div>
+              <div>
+                <dt>Scheduled</dt>
+                <dd>{debug.pending}</dd>
+              </div>
+              <div>
+                <dt>Next at</dt>
+                <dd>
+                  {debug.nextAt
+                    ? new Date(debug.nextAt).toLocaleString()
+                    : "—"}
+                </dd>
+              </div>
+            </dl>
+          )}
         </div>
       </section>
 
