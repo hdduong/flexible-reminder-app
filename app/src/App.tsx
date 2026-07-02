@@ -176,7 +176,7 @@ function App() {
   }, [reminders]);
 
   const pendingOccurrences = todayOccurrences.filter((occurrence) => !dismissedOccurrenceIds.includes(occurrence.id));
-  const upNext = pendingOccurrences[0] ?? todayOccurrences[0] ?? null;
+  const upNext = pendingOccurrences[0] ?? null;
   const preview = useMemo(() => {
     try {
       return toDisplayOccurrences(
@@ -321,19 +321,35 @@ function App() {
   }
 
   async function handleOccurrenceAction(action: "done" | "later" | "skip", occurrence: DisplayOccurrence) {
+    setErrorMessage(null);
+    setSuccessMessage(null);
     setDismissedOccurrenceIds((current) => [...new Set([...current, occurrence.id])]);
 
-    if (action === "done") {
-      await markDone(occurrence.id);
-      return;
-    }
+    try {
+      if (action === "done") {
+        await markDone(occurrence.id);
+        setSuccessMessage("Marked done.");
+        return;
+      }
 
-    if (action === "skip") {
-      await skipOccurrence(occurrence.id);
-      return;
-    }
+      if (action === "skip") {
+        await skipOccurrence(occurrence.id);
+        setSuccessMessage("Skipped.");
+        return;
+      }
 
-    await snoozeOccurrence(occurrence.id, settings.defaultSnoozeMinutes);
+      await snoozeOccurrence(occurrence.id, settings.defaultSnoozeMinutes);
+      setSuccessMessage(`Snoozed ${settings.defaultSnoozeMinutes} minutes.`);
+    } catch (error) {
+      setDismissedOccurrenceIds((current) =>
+        current.filter((id) => id !== occurrence.id),
+      );
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to update reminder occurrence.",
+      );
+    }
   }
 
   async function saveSettings(next: AppSettings) {
