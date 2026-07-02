@@ -146,7 +146,11 @@ button {
   margin: 0 12px 10px;
   padding: 10px 12px;
   position: sticky;
-  top: 0;
+  /* Matches .phone-content's padding-top: on a full-bleed phone
+     (viewport-fit=cover) the scrollport's top edge is the physical screen
+     top, so sticking at 0 would slide the notice under the notch/status
+     bar. Pinning at the safe-area line keeps it fully visible. */
+  top: max(20px, env(safe-area-inset-top));
   z-index: 5;
 }
 
