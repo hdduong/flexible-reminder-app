@@ -155,14 +155,26 @@ test("removes saved reminders with a swipe action", async ({
   await expect(savedList).toContainText("No reminders yet");
 });
 
-test("shows privacy and snooze settings", async ({ page }) => {
+test("shows privacy and snooze settings", async ({ page }, testInfo) => {
   await page.getByRole("button", { name: "Settings" }).click();
 
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByText(/Notifications/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send Test" })).toBeVisible();
   await expect(page.locator(".settings-list")).toContainText("Default snooze");
   await expect(page.locator(".settings-list")).toContainText("10 minutes");
   await expect(page.locator(".settings-list")).toContainText("Privacy mode");
   await expect(page.locator(".settings-list")).toContainText("Export data");
+
+  const screenshot = await page.screenshot({
+    fullPage: true,
+    path: testInfo.outputPath("settings-notification-diagnostics-mobile.png"),
+  });
+
+  await testInfo.attach("settings-notification-diagnostics-mobile", {
+    body: screenshot,
+    contentType: "image/png",
+  });
 });
 
 async function swipeLeft(locator: Locator) {

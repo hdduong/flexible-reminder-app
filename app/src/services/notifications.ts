@@ -20,8 +20,8 @@ const MAX_NOTIFICATIONS_PER_REMINDER = 32;
 // iOS rejects a whole schedule batch if any trigger date reaches native code
 // at or before "now"; a small lead avoids bridge-delay failures.
 const MIN_NOTIFICATION_LEAD_MS = 5_000;
+const TEST_NOTIFICATION_LEAD_MS = 10_000;
 const DEFAULT_NOTIFICATION_SOUND = "default";
-const NOTIFICATION_PERMISSION_TIMEOUT_MS = 60_000;
 const NOTIFICATION_NATIVE_CALL_TIMEOUT_MS = 10_000;
 const NOTIFICATION_PLUGIN_LOAD_TIMEOUT_MS = 5_000;
 
@@ -34,7 +34,7 @@ interface LocalNotificationDescriptor {
   sound?: string;
   silent?: boolean;
   schedule?: {
-    at: Date;
+    at: Date | string;
     allowWhileIdle?: boolean;
   };
   extra?: Record<string, unknown>;
@@ -57,6 +57,10 @@ interface LocalNotificationsPlugin {
   getPending?: () => Promise<{
     notifications: Array<LocalNotificationDescriptor>;
   }>;
+  getDeliveredNotifications?: () => Promise<{
+    notifications: Array<LocalNotificationDescriptor>;
+  }>;
+  areEnabled?: () => Promise<{ value: boolean }>;
 }
 
 let localNotificationsPromise: Promise<LocalNotificationsPlugin | null> | null =
@@ -76,11 +80,11 @@ export async function requestNotificationPermission(): Promise<
   let permissionStatus: "granted" | "denied" = "denied";
 
   try {
-    const response = await withNativeTimeout(
-      plugin.requestPermissions(),
-      "LocalNotifications.requestPermissions",
-      NOTIFICATION_PERMISSION_TIMEOUT_MS,
-    );
+    // This shows the interactive iOS permission prompt and resolves only after
+    // the user taps a choice. Wrapping it in a short native timeout can record
+    // "denied" while the user is still deciding, which leaves reminders saved
+    // but never scheduled.
+    const response = await plugin.requestPermissions();
     const status = normalizePermissionStatus(response);
     permissionStatus = status === "granted" ? "granted" : "denied";
   } catch {
@@ -112,6 +116,99 @@ export async function getNotificationPermissionStatus(): Promise<
     resetLocalNotificationsPlugin();
     return "denied";
   }
+}
+
+export async function getNotificationDiagnostics(): Promise<{
+  available: boolean;
+  enabled: boolean | null;
+  pending: number;
+  delivered: number;
+  nextAt: string | null;
+}> {
+  const plugin = await getLocalNotificationsPlugin();
+
+  if (!plugin) {
+    return {
+      available: false,
+      enabled: null,
+      pending: 0,
+      delivered: 0,
+      nextAt: null,
+    };
+  }
+
+  const [enabled, pending, delivered] = await Promise.all([
+    getNotificationsEnabled(plugin),
+    getPendingNotifications(plugin, { resetOnFailure: false }),
+    getDeliveredNotifications(plugin),
+  ]);
+  const appPending = (pending?.notifications ?? []).filter(isAppNotification);
+  const appDelivered = (delivered?.notifications ?? []).filter(isAppNotification);
+  const times = appPending
+    .map((notification) => getNotificationScheduleTime(notification))
+    .filter((time) => Number.isFinite(time))
+    .sort((left, right) => left - right);
+
+  return {
+    available: true,
+    enabled,
+    pending: appPending.length,
+    delivered: appDelivered.length,
+    nextAt: times.length > 0 ? new Date(times[0]).toISOString() : null,
+  };
+}
+
+export async function sendTestNotification(): Promise<
+  "scheduled" | "denied" | "unavailable"
+> {
+  const plugin = await getLocalNotificationsPlugin();
+
+  if (!plugin) {
+    return "unavailable";
+  }
+
+  const status = await getNotificationPermissionStatus();
+  if (status !== "granted") {
+    return "denied";
+  }
+
+  await ensureActionTypesRegistered(plugin);
+
+  const at = new Date(Date.now() + TEST_NOTIFICATION_LEAD_MS);
+  const notification: LocalNotificationDescriptor = {
+    id: notificationIdForOccurrence(`test:${at.getTime()}`),
+    title: "Test reminder",
+    body: "If you can see this, notifications are working.",
+    sound: DEFAULT_NOTIFICATION_SOUND,
+    silent: false,
+    schedule: {
+      at,
+      allowWhileIdle: true,
+    },
+    extra: {
+      app: APP_NOTIFICATION_MARKER,
+      test: true,
+      scheduledFor: at.toISOString(),
+    },
+    actionTypeId: REMINDER_ACTION_TYPE_ID,
+  };
+  let scheduled = false;
+
+  await enqueueReconcile("schedule test notification", async () => {
+    try {
+      await withNativeTimeout(
+        plugin.schedule({ notifications: [notification] }),
+        "LocalNotifications.schedule (test)",
+        NOTIFICATION_NATIVE_CALL_TIMEOUT_MS,
+      );
+      scheduled = true;
+    } catch (error) {
+      resetLocalNotificationsPlugin();
+      throw error;
+    }
+  });
+
+  return scheduled ? "scheduled" : "unavailable";
 }
 
 // Every native-queue mutation runs through this single FIFO so they never
@@ -251,7 +348,7 @@ export async function cancelReminderNotifications(
 
   const ids = pending.notifications
     .filter((notification) => notification.extra?.reminderId === reminderId)
-    .filter((notification) => notification.extra?.app === APP_NOTIFICATION_MARKER)
+    .filter(isAppNotification)
     .map((notification) => ({ id: notification.id }));
 
   await cancelNotifications(plugin, ids);
@@ -274,7 +371,7 @@ export async function cancelOccurrenceNotification(
 
   const ids = pending.notifications
     .filter((notification) => notification.extra?.occurrenceId === occurrenceId)
-    .filter((notification) => notification.extra?.app === APP_NOTIFICATION_MARKER)
+    .filter(isAppNotification)
     .map((notification) => ({ id: notification.id }));
 
   await cancelNotifications(plugin, ids);
@@ -374,7 +471,7 @@ async function cancelAllAppNotifications(): Promise<void> {
   }
 
   const ids = pending.notifications
-    .filter((notification) => notification.extra?.app === APP_NOTIFICATION_MARKER)
+    .filter(isAppNotification)
     .map((notification) => ({ id: notification.id }));
 
   await cancelNotifications(plugin, ids);
@@ -457,6 +554,7 @@ async function getLocalNotificationsPlugin(): Promise<LocalNotificationsPlugin |
 
 async function getPendingNotifications(
   plugin: LocalNotificationsPlugin,
+  options: { resetOnFailure?: boolean } = {},
 ): Promise<{ notifications: LocalNotificationDescriptor[] } | null> {
   if (!plugin.getPending) {
     return null;
@@ -469,7 +567,47 @@ async function getPendingNotifications(
       NOTIFICATION_NATIVE_CALL_TIMEOUT_MS,
     );
   } catch {
-    resetLocalNotificationsPlugin();
+    if (options.resetOnFailure !== false) {
+      resetLocalNotificationsPlugin();
+    }
+    return null;
+  }
+}
+
+async function getDeliveredNotifications(
+  plugin: LocalNotificationsPlugin,
+): Promise<{ notifications: LocalNotificationDescriptor[] } | null> {
+  if (!plugin.getDeliveredNotifications) {
+    return null;
+  }
+
+  try {
+    return await withNativeTimeout(
+      plugin.getDeliveredNotifications(),
+      "LocalNotifications.getDeliveredNotifications",
+      NOTIFICATION_NATIVE_CALL_TIMEOUT_MS,
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function getNotificationsEnabled(
+  plugin: LocalNotificationsPlugin,
+): Promise<boolean | null> {
+  if (!plugin.areEnabled) {
+    return null;
+  }
+
+  try {
+    return (
+      await withNativeTimeout(
+        plugin.areEnabled(),
+        "LocalNotifications.areEnabled",
+        NOTIFICATION_NATIVE_CALL_TIMEOUT_MS,
+      )
+    ).value;
+  } catch {
     return null;
   }
 }
@@ -491,6 +629,26 @@ async function cancelNotifications(
   } catch {
     resetLocalNotificationsPlugin();
   }
+}
+
+function isAppNotification(notification: LocalNotificationDescriptor): boolean {
+  return notification.extra?.app === APP_NOTIFICATION_MARKER;
+}
+
+function getNotificationScheduleTime(
+  notification: LocalNotificationDescriptor,
+): number {
+  const at = notification.schedule?.at;
+
+  if (at instanceof Date) {
+    return at.getTime();
+  }
+
+  if (typeof at === "string") {
+    return new Date(at).getTime();
+  }
+
+  return Number.NaN;
 }
 
 function resetLocalNotificationsPlugin(): void {
