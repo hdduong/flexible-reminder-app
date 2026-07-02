@@ -30,6 +30,7 @@ import {
 import {
   getNotificationDiagnostics,
   getNotificationPermissionStatus,
+  isNativeNotificationPlatform,
   requestNotificationPermission,
   rescheduleAllNotifications,
   sendTestNotification,
@@ -72,6 +73,15 @@ const swipeRevealPixels = 96;
 const swipeOpenThresholdPixels = 44;
 const requiredReminderTextMessage = "Reminder text is required.";
 const startupNotificationPromptDelayMs = 800;
+// On web (Safari / Home Screen shortcut) native notifications don't exist, so
+// point the user at the real app instead of hinting at a broken build. Native
+// sessions can also report "unavailable" on a transient bridge failure, so the
+// callers gate this wording on isNativeNotificationPlatform() and show a
+// retry message there instead.
+const webVersionNotificationMessage =
+  "This is the web version — notifications can't work here. Open the app installed from TestFlight.";
+const nativeNotificationFailureMessage =
+  "Could not reach the notification system. Try again in a moment.";
 
 const newReminderTemplate: DraftReminder = {
   id: null,
@@ -97,6 +107,10 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  // Session-only dismissal: the notice returns on the next launch because the
+  // web version stays notification-less no matter how often it's dismissed.
+  const [webNoticeDismissed, setWebNoticeDismissed] = useState(false);
+  const showWebNotice = !isNativeNotificationPlatform() && !webNoticeDismissed;
 
   useEffect(() => {
     void bootstrap();
@@ -356,6 +370,26 @@ function App() {
     <main className="app-shell">
       <section className={errorMessage || successMessage ? "phone phone-with-toast" : "phone"}>
         <div className="phone-content">
+          {showWebNotice && (
+            <div className="web-notice" role="note">
+              <div>
+                <strong>Web version</strong>
+                <span>
+                  Reminders can&apos;t fire here. Open the app installed from
+                  TestFlight to get notifications.
+                </span>
+              </div>
+              <button
+                type="button"
+                className="web-notice-dismiss"
+                aria-label="Dismiss web version notice"
+                onClick={() => setWebNoticeDismissed(true)}
+              >
+                ×
+              </button>
+            </div>
+          )}
+
           {tab === "today" && (
             <TodayScreen
               upNext={upNext}
@@ -673,7 +707,9 @@ function SettingsScreen({
 
       if (!diagnostics.available) {
         setNotificationMessage(
-          "Notifications are not available in this build.",
+          isNativeNotificationPlatform()
+            ? nativeNotificationFailureMessage
+            : webVersionNotificationMessage,
         );
       } else if (status === "granted") {
         await rescheduleAllNotifications();
@@ -703,7 +739,13 @@ function SettingsScreen({
       } else if (result === "denied") {
         setNotificationMessage("Allow notifications before sending a test.");
       } else {
-        setNotificationMessage("Notifications are not available in this build.");
+        // "unavailable" on native means the schedule call failed or timed out
+        // (transient, retryable) — only a web session earns the web message.
+        setNotificationMessage(
+          isNativeNotificationPlatform()
+            ? nativeNotificationFailureMessage
+            : webVersionNotificationMessage,
+        );
       }
 
       if (result === "scheduled") {
