@@ -28,6 +28,7 @@ import {
   previewSchedule as previewReminderSchedule,
 } from "./services/schedule";
 import {
+  getLastNativeNotificationError,
   getNotificationDiagnostics,
   getNotificationPermissionStatus,
   isNativeNotificationPlatform,
@@ -82,6 +83,14 @@ const webVersionNotificationMessage =
   "This is the web version — notifications can't work here. Open the app installed from TestFlight.";
 const nativeNotificationFailureMessage =
   "Could not reach the notification system. Try again in a moment.";
+
+// Appends the verbatim reason the last native notification call failed, so a
+// single on-device screenshot distinguishes "not implemented" (plugin missing
+// from the binary) from a timeout (hung bridge) from an OS-level error.
+function withNativeErrorDetail(message: string): string {
+  const detail = getLastNativeNotificationError();
+  return detail ? `${message} (${detail})` : message;
+}
 
 const newReminderTemplate: DraftReminder = {
   id: null,
@@ -724,7 +733,7 @@ function SettingsScreen({
       if (!diagnostics.available) {
         setNotificationMessage(
           isNativeNotificationPlatform()
-            ? nativeNotificationFailureMessage
+            ? withNativeErrorDetail(nativeNotificationFailureMessage)
             : webVersionNotificationMessage,
         );
       } else if (status === "granted") {
@@ -732,8 +741,12 @@ function SettingsScreen({
         await delayForNativeNotificationCommit();
         setNotificationMessage("Notifications enabled. Reminders rescheduled.");
       } else {
+        // A real OS denial and a failing native call both land here; the
+        // recorded error (if any) tells them apart on-device.
         setNotificationMessage(
-          "Notifications are blocked in iOS Settings. If no Notifications row appears, reinstall the app and tap Enable again.",
+          withNativeErrorDetail(
+            "Notifications are blocked in iOS Settings. If no Notifications row appears, reinstall the app and tap Enable again.",
+          ),
         );
       }
 
@@ -759,7 +772,7 @@ function SettingsScreen({
         // (transient, retryable) — only a web session earns the web message.
         setNotificationMessage(
           isNativeNotificationPlatform()
-            ? nativeNotificationFailureMessage
+            ? withNativeErrorDetail(nativeNotificationFailureMessage)
             : webVersionNotificationMessage,
         );
       }

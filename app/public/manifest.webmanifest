@@ -4,8 +4,8 @@
   "description": "Free-text local reminders with flexible weekday schedules.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FCFAF7",
-  "theme_color": "#CF623B",
+  "background_color": "#F2F2F7",
+  "theme_color": "#007AFF",
   "icons": [
     {
       "src": "/logo-buzz.svg",

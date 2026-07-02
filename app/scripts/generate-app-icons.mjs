@@ -58,7 +58,7 @@ async function renderIcon(page, outputPath, pixels) {
             display: block;
             width: ${pixels}px;
             height: ${pixels}px;
-            background: #FCFAF7;
+            background: #F2F2F7;
           }
 
           svg {
