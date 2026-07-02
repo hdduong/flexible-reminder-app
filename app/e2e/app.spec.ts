@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
 
@@ -121,6 +121,44 @@ test("supports free-text reminder creation", async ({ page }, testInfo) => {
   await expect(page.locator(".saved-list")).toContainText("every 20 min");
 });
 
+test("today action buttons visibly clear the current reminder", async ({
+  page,
+}, testInfo) => {
+  const exactTime = await getFutureTodayTime(page);
+
+  await page.getByRole("button", { name: "Reminders" }).click();
+  await page.getByPlaceholder("Try bathroom").fill("Take medicine");
+  await page.getByLabel("Start").fill("00:00");
+  await page.getByLabel("End").fill("23:59");
+  await page.getByRole("button", { name: "Sun" }).click();
+  await page.getByRole("button", { name: "Sat" }).click();
+  await page.getByRole("button", { name: "Exact Times" }).click();
+  await page.getByLabel("Exact times").fill(exactTime);
+  await page.getByRole("button", { name: "Save Reminder" }).click();
+  await expect(page.getByRole("status")).toHaveText("Reminder saved.");
+
+  await page.getByRole("button", { name: "Today", exact: true }).click();
+
+  const upNextCard = page.locator(".up-next-card");
+  await expect(upNextCard).toContainText("Take medicine");
+
+  await upNextCard.getByRole("button", { name: "Done" }).click();
+
+  await expect(page.getByRole("status")).toHaveText("Marked done.");
+  await expect(upNextCard).toContainText("No reminders left");
+  await expect(upNextCard).not.toContainText("Take medicine");
+
+  const screenshot = await page.screenshot({
+    fullPage: true,
+    path: testInfo.outputPath("today-action-done-mobile.png"),
+  });
+
+  await testInfo.attach("today-action-done-mobile", {
+    body: screenshot,
+    contentType: "image/png",
+  });
+});
+
 test("removes saved reminders with a swipe action", async ({
   page,
 }, testInfo) => {
@@ -194,4 +232,22 @@ async function swipeLeft(locator: Locator) {
   await page.mouse.down();
   await page.mouse.move(endX, y, { steps: 8 });
   await page.mouse.up();
+}
+
+async function getFutureTodayTime(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const now = new Date();
+    const candidate = new Date(now.getTime() + 5 * 60_000);
+    const sameDay =
+      candidate.getFullYear() === now.getFullYear() &&
+      candidate.getMonth() === now.getMonth() &&
+      candidate.getDate() === now.getDate();
+    const futureToday = sameDay
+      ? candidate
+      : new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59);
+
+    return `${String(futureToday.getHours()).padStart(2, "0")}:${String(
+      futureToday.getMinutes(),
+    ).padStart(2, "0")}`;
+  });
 }
