@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings, Reminder, ReminderOccurrence } from "../types";
 import { createDefaultSettings } from "../types";
 import {
+  getLastNativeNotificationError,
   getNotificationDiagnostics,
   isNativeNotificationPlatform,
   requestNotificationPermission,
@@ -225,6 +226,16 @@ describe("notifications", () => {
 
     expect(localNotificationMocks.requestPermissions).not.toHaveBeenCalled();
     expect(localNotificationMocks.schedule).not.toHaveBeenCalled();
+  });
+
+  it("records the verbatim native failure for on-device display", async () => {
+    localNotificationMocks.schedule.mockRejectedValueOnce(
+      new Error("not implemented"),
+    );
+
+    await expect(sendTestNotification()).resolves.toBe("unavailable");
+
+    expect(getLastNativeNotificationError()).toBe("schedule: not implemented");
   });
 
   it("skips past and too-close occurrences before calling native scheduling", async () => {

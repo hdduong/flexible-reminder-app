@@ -78,6 +78,21 @@ export function isNativeNotificationPlatform(): boolean {
   return Capacitor.getPlatform() !== "web";
 }
 
+// The exact reason the most recent native notification call failed, verbatim
+// ("not implemented", "…timed out after 10000ms", a plugin exception, …).
+// Settings shows it next to the failure message so an on-device screenshot
+// pinpoints the broken layer instead of requiring a tethered debugger.
+let lastNativeNotificationError: string | null = null;
+
+export function getLastNativeNotificationError(): string | null {
+  return lastNativeNotificationError;
+}
+
+function recordNativeNotificationError(label: string, error: unknown): void {
+  const detail = error instanceof Error ? error.message : String(error);
+  lastNativeNotificationError = `${label}: ${detail}`;
+}
+
 export async function requestNotificationPermission(): Promise<
   "granted" | "denied"
 > {
@@ -98,7 +113,8 @@ export async function requestNotificationPermission(): Promise<
     const response = await plugin.requestPermissions();
     const status = normalizePermissionStatus(response);
     permissionStatus = status === "granted" ? "granted" : "denied";
-  } catch {
+  } catch (error) {
+    recordNativeNotificationError("requestPermissions", error);
     resetLocalNotificationsPlugin();
   }
 
@@ -123,7 +139,8 @@ export async function getNotificationPermissionStatus(): Promise<
         NOTIFICATION_NATIVE_CALL_TIMEOUT_MS,
       ),
     );
-  } catch {
+  } catch (error) {
+    recordNativeNotificationError("checkPermissions", error);
     resetLocalNotificationsPlugin();
     return "denied";
   }
@@ -214,6 +231,7 @@ export async function sendTestNotification(): Promise<
       );
       scheduled = true;
     } catch (error) {
+      recordNativeNotificationError("schedule", error);
       resetLocalNotificationsPlugin();
       throw error;
     }
@@ -557,7 +575,8 @@ async function getLocalNotificationsPlugin(): Promise<LocalNotificationsPlugin |
       "LocalNotifications plugin load",
       NOTIFICATION_PLUGIN_LOAD_TIMEOUT_MS,
     );
-  } catch {
+  } catch (error) {
+    recordNativeNotificationError("plugin load", error);
     resetLocalNotificationsPlugin();
     return null;
   }
