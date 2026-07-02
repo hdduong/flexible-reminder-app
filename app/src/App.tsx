@@ -71,6 +71,7 @@ const maxRepeatIntervalMinutes = 24 * 60;
 const swipeRevealPixels = 96;
 const swipeOpenThresholdPixels = 44;
 const requiredReminderTextMessage = "Reminder text is required.";
+const startupNotificationPromptDelayMs = 800;
 
 const newReminderTemplate: DraftReminder = {
   id: null,
@@ -137,17 +138,30 @@ function App() {
       setIsLoading(false);
     }
 
-    // Best-effort, after the UI is shown: ask for notification permission (the
-    // OS prompt only appears the first time) and schedule the stored reminders.
-    // Nothing here blocks loading, and failures are non-fatal.
-    void enableNotifications();
+    // Best-effort, after the UI is visible and Capacitor has had a moment to
+    // finish native plugin registration. The iOS prompt only appears once.
+    window.setTimeout(() => {
+      void enableNotifications();
+    }, startupNotificationPromptDelayMs);
   }
 
   async function enableNotifications() {
     try {
-      await requestNotificationPermission();
-      setSettings(await getSettings());
-      await rescheduleAllNotifications();
+      const currentStatus = await getNotificationPermissionStatus();
+      const permissionStatus =
+        currentStatus === "unknown"
+          ? await requestNotificationPermission()
+          : currentStatus;
+
+      setSettings(
+        await updateSettings({
+          notificationPermissionStatus: permissionStatus,
+        }),
+      );
+
+      if (permissionStatus === "granted") {
+        await rescheduleAllNotifications();
+      }
     } catch {
       // Notifications are best-effort; the app still works without them.
     }
@@ -651,14 +665,24 @@ function SettingsScreen({
 
     try {
       const status = await requestNotificationPermission();
+      // Refresh immediately so the permission result can distinguish native
+      // plugin availability before the final queue refresh below.
+      const diagnostics = await getNotificationDiagnostics();
       setNotificationStatus(status);
+      setNotificationDiagnostics(diagnostics);
 
-      if (status === "granted") {
+      if (!diagnostics.available) {
+        setNotificationMessage(
+          "Notifications are not available in this build.",
+        );
+      } else if (status === "granted") {
         await rescheduleAllNotifications();
         await delayForNativeNotificationCommit();
         setNotificationMessage("Notifications enabled. Reminders rescheduled.");
       } else {
-        setNotificationMessage("Notifications are blocked in iOS Settings.");
+        setNotificationMessage(
+          "Notifications are blocked in iOS Settings. If no Notifications row appears, reinstall the app and tap Enable again.",
+        );
       }
 
       await refreshNotificationDiagnostics();
@@ -692,7 +716,9 @@ function SettingsScreen({
   }
 
   const statusLabel =
-    notificationStatus === "granted"
+    notificationDiagnostics?.available === false
+      ? "unavailable"
+      : notificationStatus === "granted"
       ? "allowed"
       : notificationStatus === "denied"
         ? "blocked"
@@ -708,6 +734,10 @@ function SettingsScreen({
     : "Checking scheduled notifications...";
   const isEnabledLabel =
     notificationDiagnostics?.enabled === false ? " · disabled" : "";
+  const canRequestNotifications =
+    notificationDiagnostics !== null &&
+    notificationStatus !== "granted" &&
+    notificationDiagnostics?.available !== false;
 
   return (
     <div className="screen settings-screen">
@@ -730,7 +760,7 @@ function SettingsScreen({
       </section>
 
       <div className="notification-actions">
-        {notificationStatus !== "granted" && (
+        {canRequestNotifications && (
           <button
             type="button"
             className="primary-button"
