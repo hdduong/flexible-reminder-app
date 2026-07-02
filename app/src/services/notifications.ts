@@ -88,6 +88,15 @@ export function getLastNativeNotificationError(): string | null {
   return lastNativeNotificationError;
 }
 
+// Called at the start of each user-facing attempt (Enable / Send Test) so the
+// detail shown in Settings is scoped to that attempt — a stale failure never
+// decorates a fresh, genuine OS denial. Deliberately NOT cleared inside every
+// native call: background reconciles run checkPermissions/getPending
+// constantly and would race the message composition in Settings.
+export function clearLastNativeNotificationError(): void {
+  lastNativeNotificationError = null;
+}
+
 function recordNativeNotificationError(label: string, error: unknown): void {
   const detail = error instanceof Error ? error.message : String(error);
   lastNativeNotificationError = `${label}: ${detail}`;
@@ -96,6 +105,7 @@ function recordNativeNotificationError(label: string, error: unknown): void {
 export async function requestNotificationPermission(): Promise<
   "granted" | "denied"
 > {
+  clearLastNativeNotificationError();
   const plugin = await getLocalNotificationsPlugin();
 
   if (!plugin?.requestPermissions) {
@@ -189,6 +199,7 @@ export async function getNotificationDiagnostics(): Promise<{
 export async function sendTestNotification(): Promise<
   "scheduled" | "denied" | "unavailable"
 > {
+  clearLastNativeNotificationError();
   const plugin = await getLocalNotificationsPlugin();
 
   if (!plugin) {
@@ -449,7 +460,11 @@ export async function scheduleOccurrenceNotifications(
         "LocalNotifications.schedule",
         NOTIFICATION_NATIVE_CALL_TIMEOUT_MS,
       );
-    } catch {
+    } catch (error) {
+      // The reminder write path is the most common scheduling failure; record
+      // it so Settings can surface the reason, same as the test-notification
+      // path.
+      recordNativeNotificationError("schedule", error);
       resetLocalNotificationsPlugin();
     }
   }

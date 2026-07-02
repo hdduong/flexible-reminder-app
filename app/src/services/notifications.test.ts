@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings, Reminder, ReminderOccurrence } from "../types";
 import { createDefaultSettings } from "../types";
 import {
+  clearLastNativeNotificationError,
   getLastNativeNotificationError,
   getNotificationDiagnostics,
   isNativeNotificationPlatform,
@@ -74,6 +75,7 @@ const settings: AppSettings = createDefaultSettings(
 describe("notifications", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearLastNativeNotificationError();
     storageMocks.reminders = [];
     storageMocks.getSettings.mockResolvedValue(settings);
     storageMocks.listRemindersFromStorage.mockImplementation(
@@ -236,6 +238,11 @@ describe("notifications", () => {
     await expect(sendTestNotification()).resolves.toBe("unavailable");
 
     expect(getLastNativeNotificationError()).toBe("schedule: not implemented");
+
+    // Each attempt is scoped fresh: a later successful attempt must not keep
+    // showing the stale failure detail.
+    await expect(sendTestNotification()).resolves.toBe("scheduled");
+    expect(getLastNativeNotificationError()).toBeNull();
   });
 
   it("skips past and too-close occurrences before calling native scheduling", async () => {
